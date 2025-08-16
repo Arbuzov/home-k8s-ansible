@@ -1,52 +1,129 @@
-# Быстрая настройка кластера Kubernetes на Raspberry Pi
+# 🚀 Kubernetes на Raspberry Pi - Быстрый старт
 
-## Подготовка
+## 📋 Что нужно
+- Raspberry Pi 4 (4GB+) для мастера
+- Raspberry Pi 3/4 для worker нод
+- Raspberry Pi OS 64-bit (Bookworm) на всех нодах
+- SSH доступ ко всем нодам
 
-1. **Подготовьте Raspberry Pi**:
-   - Raspberry Pi 4 (master + worker)
-   - 2x Raspberry Pi 3 (workers)
-   - Установите Raspberry Pi OS на все устройства
-   - Включите SSH на всех устройствах
+## ⚡ Быстрая установка
 
-2. **Настройте сеть**:
-   - Назначьте статические IP адреса
-   - Убедитесь, что все устройства видят друг друга
+### 1. Подготовка
+```bash
+# Клонируйте репозиторий
+git clone <repo-url>
+cd kubernetes-ansible
 
-3. **Настройте SSH ключи**:
-   ```bash
-   ssh-keygen -t rsa -b 4096
-   ssh-copy-id pi@192.168.1.100  # master
-   ssh-copy-id pi@192.168.1.101  # worker1
-   ssh-copy-id pi@192.168.1.102  # worker2
-   ```
+# Создайте файл с кредами
+cp credentials.json.example credentials.json
+```
 
-## Развертывание
+### 2. Настройка кредов
+Отредактируйте `credentials.json`:
+```json
+{
+  "users": {
+    "admin_user": "pi",
+    "admin_password": "ваш-пароль"
+  }
+}
+```
 
-1. **Клонируйте репозиторий**:
+### 3. Настройка инвентаря
+Отредактируйте `inventory.yml` с IP адресами ваших Pi:
+```yaml
+all:
+  children:
+    masters:
+      hosts:
+        pi4-master:
+          ansible_host: 192.168.1.100
+    workers:
+      hosts:
+        pi3-worker1:
+          ansible_host: 192.168.1.101
+        pi3-worker2:
+          ansible_host: 192.168.1.102
+```
 
-   ```bash
-   git clone <this-repo>
-   cd local-cluster-ansible
-   ```
+### 4. Установка кластера
+```bash
+# Проверьте доступность
+ansible all -m ping -e @credentials.json
 
-2. **Настройте переменные**:
+# Установите кластер
+ansible-playbook site.yml -e @credentials.json
+```
 
-   ```bash
-   cp credentials.json.example credentials.json
-   # Отредактируйте credentials.json и inventory.yml
-   ```
+### 5. Проверка
+```bash
+# Подключитесь к мастеру и проверьте кластер
+ssh pi@192.168.1.100
+kubectl get nodes
 
-3. **Установите зависимости**:
+# Ожидаемый результат:
+# NAME            STATUS   ROLES                  AGE   VERSION
+# pi4-master      Ready    control-plane,worker   5m    v1.33.1
+# pi3-worker1     Ready    worker                 3m    v1.33.1
+# pi3-worker2     Ready    worker                 2m    v1.33.1
+```
 
-   ```bash
-   ansible-galaxy collection install -r requirements.yml
-   ```
+## 🔧 Добавление новой worker ноды
 
-4. **Проверьте подключение**:
+```bash
+# Установите и присоедините новую ноду
+ansible-playbook playbooks/install-worker-with-join.yml \
+  --limit новая-нода,pi4-master \
+  -e @credentials.json
+```
 
-   ```bash
-   ansible all -m ping
-   ```
+## 🆘 Решение проблем
+
+### Nода в статусе NotReady
+```bash
+# Проверьте kubelet
+ssh pi@проблемная-нода
+sudo systemctl status kubelet
+sudo journalctl -u kubelet -f
+```
+
+### Проблемы с cgroups
+Проверьте параметры ядра:
+```bash
+cat /proc/cmdline
+# Должно содержать: cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
+```
+
+### Swap не отключен
+```bash
+# Проверьте swap
+free -h
+# Swap должен быть 0B
+
+# Если swap включен
+sudo swapoff -a
+sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+```
+
+### containerd проблемы
+```bash
+# Проверьте containerd
+sudo systemctl status containerd
+
+# Проверьте CRI API
+sudo crictl version
+```
+
+## 📚 Дополнительно
+- [Полная документация](README.md)
+- [Документация ролей](roles/)
+- [Плейбуки](playbooks/)
+
+## ⚠️ Важно
+- **Используйте только Raspberry Pi OS 64-bit (Bookworm)**
+- **Не игнорируйте preflight ошибки** - исправляйте их
+- **Swap должен быть полностью отключен**
+- **cgroups параметры критически важны для RPi**
 
 5. **Разверните кластер**:
 

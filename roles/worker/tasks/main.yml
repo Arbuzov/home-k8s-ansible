@@ -27,3 +27,10 @@
   debug:
     msg: "{{ cluster_nodes.stdout_lines }}"
   when: cluster_nodes is defined
+
+- name: Add worker role label to node
+  shell: |
+    KUBECONFIG=/etc/kubernetes/admin.conf kubectl label node {{ ansible_hostname }} node-role.kubernetes.io/worker= --overwrite
+  delegate_to: "{{ groups['masters'][0] }}"
+  become: true
+  tags: [worker-label]

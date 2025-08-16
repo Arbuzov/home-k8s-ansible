@@ -1,4 +1,8 @@
----
+# Версия Kubernetes (major.minor)
+kubernetes_major_minor: 1.33
+# Версия Kubernetes (major.minor)
+kubernetes_major_minor: 1.33
+kubernetes_version: 1.33.1
 # Общие переменные для всех хостов
 timezone: "Europe/Moscow"
 
@@ -14,8 +18,6 @@ system_packages:
   - vim
   - git
 
-# Kubernetes версия
-kubernetes_version: "1.28"
 kubernetes_cni: "flannel"
 
 # Docker настройки

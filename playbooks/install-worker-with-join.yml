@@ -1,0 +1,133 @@
+---
+- name: Install and Join Worker Node to Kubernetes Cluster
+  hosts: workers
+  become: true
+  gather_facts: true
+  serial: 1
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: ../credentials.json
+      tags: always
+    - name: Set ansible_ssh_pass from credentials
+      set_fact:
+        ansible_ssh_pass: "{{ users.admin_password }}"
+      tags: always
+
+  roles:
+    - role: ../roles/common
+      tags: [install, worker-setup]
+    - role: ../roles/containerd
+      tags: [install, worker-setup]
+    - role: ../roles/kubernetes
+      tags: [install, worker-setup]
+
+- name: Generate Join Token on Master (without updates)
+  hosts: masters
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: ../credentials.json
+      tags: always
+    - name: Set ansible_ssh_pass from credentials
+      set_fact:
+        ansible_ssh_pass: "{{ users.admin_password }}"
+      tags: always
+
+  tasks:
+    - name: Check if cluster is already initialized
+      ansible.builtin.stat:
+        path: /etc/kubernetes/admin.conf
+      register: cluster_initialized
+      tags: [join-token]
+
+    - name: Generate join token
+      ansible.builtin.command: kubeadm token create --print-join-command
+      register: master_join_command
+      when: cluster_initialized.stat.exists
+      tags: [join-token]
+
+    - name: Save join command to file on master
+      ansible.builtin.copy:
+        content: "{{ master_join_command.stdout }}"
+        dest: /tmp/kubeadm-join-command
+        mode: '0644'
+      when: cluster_initialized.stat.exists
+      tags: [join-token]
+
+    - name: Fetch join command to local machine
+      ansible.builtin.fetch:
+        src: /tmp/kubeadm-join-command
+        dest: ./kubeadm-join-command
+        flat: true
+      when: cluster_initialized.stat.exists
+      tags: [join-token]
+
+- name: Join Worker to Cluster
+  hosts: workers
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: ../credentials.json
+      tags: always
+    - name: Set ansible_ssh_pass from credentials
+      set_fact:
+        ansible_ssh_pass: "{{ users.admin_password }}"
+      tags: always
+
+  tasks:
+    - name: Disable swap immediately
+      ansible.builtin.command: swapoff -a
+      tags: [worker-join]
+
+    - name: Disable swap permanently in fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s.*)$'
+        replace: '#\1'
+      tags: [worker-join]
+
+    - name: Read join command from local file
+      ansible.builtin.slurp:
+        src: ./kubeadm-join-command
+      register: join_command_file
+      delegate_to: localhost
+      become: false
+      tags: [worker-join]
+
+    - name: Set join command fact
+      ansible.builtin.set_fact:
+        join_command: "{{ join_command_file.content | b64decode | trim }}"
+      tags: [worker-join]
+
+    - name: Check if node is already joined
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: node_joined
+      tags: [worker-join]
+
+    - name: Join worker node to cluster
+      ansible.builtin.command: "{{ join_command }}"
+      when: not node_joined.stat.exists
+      tags: [worker-join]
+
+    - name: Verify node joined successfully
+      ansible.builtin.command: systemctl is-active kubelet
+      register: kubelet_status
+      tags: [worker-join, verify]
+
+    - name: Display kubelet status
+      ansible.builtin.debug:
+        msg: "Kubelet status: {{ kubelet_status.stdout }}"
+      tags: [worker-join, verify]
+
+    - name: Add worker role label to node
+      ansible.builtin.shell: |
+        KUBECONFIG=/etc/kubernetes/admin.conf kubectl label node {{ ansible_hostname }} node-role.kubernetes.io/worker= --overwrite
+      delegate_to: "{{ groups['masters'][0] }}"
+      become: true
+      tags: [worker-join, label]
