@@ -1,9 +1,5 @@
-# Версия Kubernetes (major.minor)
-kubernetes_major_minor: 1.33
-# Версия Kubernetes (major.minor)
-kubernetes_major_minor: 1.33
-kubernetes_version: 1.33.1
 # Общие переменные для всех хостов
+# Версии Kubernetes задаются индивидуально для каждой ноды в inventory.yml
 timezone: "Europe/Moscow"
 
 # Системные пакеты
