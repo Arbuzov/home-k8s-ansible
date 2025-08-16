@@ -1,0 +1,47 @@
+# Ansible
+*.retry
+.ansible_facts_cache/
+kubeadm-join-command
+
+# Credentials and configs
+credentials.json
+credentials-test.json
+node-updates.yml
+inventory-test.yml
+inventory-ci.yml
+
+# DevContainer and testing
+.devcontainer/.env
+tests/.molecule/
+tests/__pycache__/
+.pytest_cache/
+
+# Temporary files
+*.tmp
+*.log
+
+# Editor files
+.vscode/settings.json
+.vscode/launch.json
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Backup files
+*.bak
+*.backup
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Documentation
+docs/_build/
+site/

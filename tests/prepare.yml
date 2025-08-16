@@ -1,0 +1,50 @@
+---
+- name: Prepare test environment
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install basic packages for testing
+      apt:
+        name:
+          - curl
+          - wget
+          - python3
+          - python3-pip
+          - sudo
+        state: present
+
+    - name: Create test credentials file
+      copy:
+        content: |
+          {
+            "ssh": {
+              "private_key_path": "~/.ssh/id_rsa",
+              "public_key_path": "~/.ssh/id_rsa.pub"
+            },
+            "kubernetes": {
+              "cluster_name": "test-k8s",
+              "pod_subnet": "10.244.0.0/16",
+              "service_subnet": "10.96.0.0/12",
+              "api_server_advertise_address": "{{ ansible_default_ipv4.address }}"
+            },
+            "users": {
+              "admin_user": "testuser",
+              "admin_password": "testpass"
+            },
+            "docker": {
+              "version": "20.10.*",
+              "data_root": "/var/lib/docker"
+            },
+            "registry": {
+              "mirror": "https://registry-1.docker.io"
+            }
+          }
+        dest: /tmp/credentials.json
+        mode: '0644'

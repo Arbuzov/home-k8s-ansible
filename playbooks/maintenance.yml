@@ -1,0 +1,78 @@
+---
+- name: Cluster Maintenance Tasks
+  hosts: kubernetes_cluster
+  become: yes
+  gather_facts: yes
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: credentials.json
+
+  tasks:
+    - name: Check cluster status
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_nodes
+      delegate_to: "{{ groups['masters'][0] }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      tags: [check, status]
+
+    - name: Display cluster nodes
+      debug:
+        msg: |
+          Node: {{ item.metadata.name }}
+          Status: {{ item.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first }}
+          Version: {{ item.status.nodeInfo.kubeletVersion }}
+          OS: {{ item.status.nodeInfo.osImage }}
+      loop: "{{ cluster_nodes.resources }}"
+      tags: [check, status]
+
+    - name: Check system resources
+      ansible.builtin.shell: |
+        echo "=== Memory Usage ==="
+        free -h
+        echo "=== Disk Usage ==="
+        df -h
+        echo "=== CPU Usage ==="
+        top -bn1 | grep "Cpu(s)"
+      register: system_resources
+      tags: [check, resources]
+
+    - name: Display system resources
+      ansible.builtin.debug:
+        msg: "{{ system_resources.stdout_lines }}"
+      tags: [check, resources]
+
+    - name: Check Kubelet status
+      ansible.builtin.systemd:
+        name: kubelet
+      register: kubelet_status
+      tags: [check, kubelet]
+
+    - name: Display Kubelet status
+      ansible.builtin.debug:
+        msg: "Kubelet service is {{ kubelet_status.status.ActiveState }}"
+      tags: [check, kubelet]
+
+    - name: Clean containerd images
+      ansible.builtin.command: ctr -n k8s.io image prune
+      when: ansible_local.maintenance.containerd_cleanup | default(true)
+      tags: [cleanup, containerd]
+
+    - name: Clean apt cache
+      ansible.builtin.apt:
+        autoclean: true
+        autoremove: true
+      tags: [cleanup, apt]
+
+    - name: Restart services if needed
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: restarted
+      loop:
+        - containerd
+        - kubelet
+      when: ansible_local.maintenance.restart_services | default(false)
+      tags: [restart]

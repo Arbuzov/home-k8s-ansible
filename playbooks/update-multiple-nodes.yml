@@ -1,0 +1,105 @@
+---
+- name: Update Multiple Nodes with Custom Versions
+  hosts: localhost
+  gather_facts: no
+  vars:
+    # Пример конфигурации обновлений
+    # Переопределите через -e или в group_vars
+    node_updates:
+      pi4-master:
+        version: "1.29"
+        drain: false  # Не drain единственную master ноду
+        system_update: true
+      pi3-worker1:
+        version: "1.29"
+        drain: true
+        system_update: true
+      pi3-worker2:
+        version: "1.28"  # Можно обновлять до разных версий
+        drain: true
+        system_update: false
+
+  tasks:
+    - name: Validate node_updates configuration
+      fail:
+        msg: "Please define node_updates variable with node configurations"
+      when: node_updates is not defined or node_updates | length == 0
+
+    - name: Display update plan
+      debug:
+        msg: |
+          📋 Update Plan:
+          {% for node, config in node_updates.items() %}
+          - {{ node }}: Kubernetes {{ config.version }}{% if config.drain %} (with drain){% endif %}{% if config.system_update %} + system packages{% endif %}
+          {% endfor %}
+
+    - name: Confirm update execution
+      pause:
+        prompt: |
+          ⚠️  Are you sure you want to proceed with the update?
+          This will update nodes one by one according to the plan above.
+          Press ENTER to continue or Ctrl+C to abort
+      when: confirm_update | default(true)
+
+- name: Execute Node Updates
+  hosts: "{{ item.key }}"
+  become: yes
+  gather_facts: yes
+  serial: 1
+  vars:
+    kubernetes_target_version: "{{ item.value.version }}"
+    drain_node: "{{ item.value.drain | default(true) }}"
+    update_system_packages: "{{ item.value.system_update | default(true) }}"
+    apply_upgrade: "{{ item.value.apply_upgrade | default(true) }}"
+  loop: "{{ node_updates | dict2items }}"
+  loop_control:
+    loop_var: item
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: credentials.json
+
+    - name: Display current node update info
+      debug:
+        msg: |
+          🎯 Updating: {{ inventory_hostname }}
+          📦 Target version: {{ kubernetes_target_version }}
+          🔄 Drain node: {{ drain_node }}
+          📦 Update system: {{ update_system_packages }}
+
+  tasks:
+    - name: Include single node update tasks
+      include_tasks: ../roles/kubernetes/tasks/update-node.yml
+
+  post_tasks:
+    - name: Wait between node updates
+      pause:
+        seconds: "{{ wait_between_nodes | default(30) }}"
+      when: not ansible_loop.last
+
+- name: Final Cluster Verification
+  hosts: masters
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Get final cluster status
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: final_cluster_status
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Display final cluster status
+      debug:
+        msg: |
+          🎉 Update Complete! Final Cluster Status:
+          {% for node in final_cluster_status.resources %}
+          - {{ node.metadata.name }}: {{ node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first }} ({{ node.status.nodeInfo.kubeletVersion }})
+          {% endfor %}
+
+    - name: Check for any not ready nodes
+      fail:
+        msg: "❌ Some nodes are not ready after update!"
+      when: final_cluster_status.resources | selectattr('status.conditions', 'defined') | selectattr('status.conditions', 'selectattr', 'type', 'equalto', 'Ready') | selectattr('status.conditions', 'selectattr', 'status', 'equalto', 'False') | list | length > 0

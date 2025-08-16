@@ -1,0 +1,26 @@
+all:
+  children:
+    kubernetes_cluster:
+      children:
+        masters:
+          hosts:
+            pi4-master:
+              ansible_host: 192.168.99.44
+              ansible_user: pi
+              node_role: master
+              node_taints: []  # Мастер также является worker
+        workers:
+          hosts:
+            pi3-worker1:
+              ansible_host: 192.168.99.101
+              ansible_user: pi
+              node_role: worker
+            pi3-worker2:
+              ansible_host: 192.168.99.102
+              ansible_user: pi
+              node_role: worker
+
+  vars:
+    # Общие переменные для всех хостов
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'

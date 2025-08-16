@@ -1,0 +1,36 @@
+---
+# Общие переменные для всех хостов
+timezone: "Europe/Moscow"
+
+# Системные пакеты
+system_packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - software-properties-common
+  - htop
+  - vim
+  - git
+
+# Kubernetes версия
+kubernetes_version: "1.28"
+kubernetes_cni: "flannel"
+
+# Docker настройки
+docker_users:
+  - pi
+
+# Настройки памяти для ARM
+arm_memory_split: 16
+
+# Системные настройки
+swap_disabled: true
+cgroup_enabled: true
+
+# Сетевые настройки
+dns_servers:
+  - 8.8.8.8
+  - 8.8.4.4
+  - 1.1.1.1

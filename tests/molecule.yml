@@ -1,0 +1,86 @@
+---
+dependency:
+  name: galaxy
+  options:
+    requirements-file: ../requirements.yml
+
+driver:
+  name: docker
+
+platforms:
+  - name: test-master
+    image: ubuntu:22.04
+    pre_build_image: false
+    dockerfile: Dockerfile.test
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    tmpfs:
+      - /run
+      - /tmp
+    capabilities:
+      - SYS_ADMIN
+    command: /lib/systemd/systemd
+    groups:
+      - masters
+      - kubernetes_cluster
+
+  - name: test-worker1
+    image: ubuntu:22.04
+    pre_build_image: false
+    dockerfile: Dockerfile.test
+    privileged: true
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    tmpfs:
+      - /run
+      - /tmp
+    capabilities:
+      - SYS_ADMIN
+    command: /lib/systemd/systemd
+    groups:
+      - workers
+      - kubernetes_cluster
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      host_key_checking: false
+      stdout_callback: yaml
+  inventory:
+    group_vars:
+      all:
+        timezone: "UTC"
+        system_packages:
+          - curl
+          - wget
+          - vim
+        kubernetes_version: "1.28"
+        kubernetes_cni: "flannel"
+        docker_users:
+          - root
+        swap_disabled: true
+        cgroup_enabled: true
+        dns_servers:
+          - 8.8.8.8
+          - 1.1.1.1
+      masters:
+        kubernetes_role: "master"
+        master_schedulable: true
+        master_taints: []
+      workers:
+        kubernetes_role: "worker"
+        kubelet_max_pods: 110
+
+verifier:
+  name: ansible
+
+scenario:
+  test_sequence:
+    - dependency
+    - create
+    - prepare
+    - converge
+    - verify
+    - destroy

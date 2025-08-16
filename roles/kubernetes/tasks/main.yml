@@ -1,0 +1,73 @@
+---
+- name: Add Kubernetes GPG key
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Add Kubernetes repository
+  apt_repository:
+    repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+    state: present
+    update_cache: yes
+
+- name: Install Kubernetes packages
+  apt:
+    name:
+      - "kubelet={{ kubernetes_version }}.*"
+      - "kubeadm={{ kubernetes_version }}.*"
+      - "kubectl={{ kubernetes_version }}.*"
+    state: present
+    allow_downgrade: yes
+
+- name: Hold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Configure kubelet
+  template:
+    src: kubelet-config.yml.j2
+    dest: /etc/kubernetes/kubelet-config.yml
+    backup: yes
+  notify: restart kubelet
+
+- name: Create kubelet service directory
+  file:
+    path: /etc/systemd/system/kubelet.service.d
+    state: directory
+
+- name: Configure kubelet service
+  copy:
+    dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+    content: |
+      # Note: This dropin only works with kubeadm and kubelet v1.11+
+      [Service]
+      Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
+      Environment="KUBELET_CONFIG_ARGS=--config=/etc/kubernetes/kubelet-config.yml"
+      # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
+      EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
+      # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
+      # the .NodeRegistration.KubeletExtraArgs object in the configuration files instead. KUBELET_EXTRA_ARGS should be sourced from this file.
+      EnvironmentFile=-/etc/default/kubelet
+      ExecStart=
+      ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
+  notify: restart kubelet
+
+- name: Start and enable kubelet
+  systemd:
+    name: kubelet
+    state: started
+    enabled: yes
+    daemon_reload: yes
+
+- name: Verify Kubernetes installation
+  command: kubeadm version
+  register: kubeadm_version
+
+- name: Display kubeadm version
+  debug:
+    msg: "kubeadm version: {{ kubeadm_version.stdout }}"

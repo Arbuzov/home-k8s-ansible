@@ -1,0 +1,143 @@
+{
+  "folders": [
+    {
+      "name": "local-cluster-ansible",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "ansible.python.interpreterPath": "/usr/bin/python3",
+    "ansible.validation.enabled": true,
+    "ansible.validation.lint.enabled": true,
+    "ansible.validation.lint.path": "ansible-lint",
+    "yaml.schemas": {
+      "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/playbook": [
+        "playbooks/*.yml",
+        "site.yml"
+      ],
+      "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/tasks": [
+        "roles/*/tasks/*.yml"
+      ],
+      "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/handlers": [
+        "roles/*/handlers/*.yml"
+      ]
+    },
+    "files.associations": {
+      "*.yml": "ansible",
+      "*.yaml": "ansible",
+      "inventory.yml": "ansible-inventory",
+      "inventory-*.yml": "ansible-inventory"
+    },
+    "yaml.format.enable": true,
+    "yaml.format.singleQuote": false,
+    "yaml.format.bracketSpacing": true,
+    "editor.insertSpaces": true,
+    "editor.tabSize": 2,
+    "editor.detectIndentation": false,
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+    "python.defaultInterpreterPath": "/usr/bin/python3",
+    "terminal.integrated.cwd": "${workspaceFolder}",
+    "search.exclude": {
+      "**/.ansible_facts_cache": true,
+      "**/node_modules": true,
+      "**/.git": true
+    },
+    "files.exclude": {
+      "**/.ansible_facts_cache": true
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "redhat.ansible",
+      "ms-python.python",
+      "redhat.vscode-yaml",
+      "ms-kubernetes-tools.vscode-kubernetes-tools",
+      "ms-vscode.vscode-json",
+      "streetsidesoftware.code-spell-checker",
+      "ms-vscode-remote.remote-containers",
+      "ms-vscode.makefile-tools"
+    ]
+  },
+  "tasks": {
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Ansible: Syntax Check",
+        "type": "shell",
+        "command": "ansible-playbook",
+        "args": ["--syntax-check", "site.yml"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Ansible: Lint",
+        "type": "shell",
+        "command": "ansible-lint",
+        "args": ["playbooks/", "roles/"],
+        "group": "build",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Ansible: Test (Dry Run)",
+        "type": "shell",
+        "command": "ansible-playbook",
+        "args": ["site.yml", "--check", "--diff"],
+        "group": "test",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      },
+      {
+        "label": "Molecule: Test",
+        "type": "shell",
+        "command": "molecule",
+        "args": ["test"],
+        "options": {
+          "cwd": "${workspaceFolder}/tests"
+        },
+        "group": "test",
+        "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared"
+        },
+        "problemMatcher": []
+      }
+    ]
+  },
+  "launch": {
+    "version": "0.2.0",
+    "configurations": [
+      {
+        "name": "Debug Ansible Playbook",
+        "type": "python",
+        "request": "launch",
+        "program": "${workspaceFolder}/.venv/bin/ansible-playbook",
+        "args": [
+          "--syntax-check",
+          "site.yml"
+        ],
+        "console": "integratedTerminal",
+        "cwd": "${workspaceFolder}"
+      }
+    ]
+  }
+}

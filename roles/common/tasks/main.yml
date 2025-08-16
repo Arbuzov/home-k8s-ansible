@@ -1,0 +1,85 @@
+---
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+
+- name: Install system packages
+  apt:
+    name: "{{ system_packages }}"
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Configure memory split for GPU on Raspberry Pi
+  lineinfile:
+    path: /boot/config.txt
+    regexp: '^gpu_mem='
+    line: "gpu_mem={{ arm_memory_split }}"
+    backup: yes
+  notify: reboot system
+  when: ansible_machine == "armv7l" or ansible_machine == "aarch64"
+
+- name: Enable cgroup memory and cpuset
+  lineinfile:
+    path: /boot/cmdline.txt
+    regexp: '^(.*?)(\s+)?$'
+    line: '\1 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory'
+    backrefs: yes
+    backup: yes
+  notify: reboot system
+  when: cgroup_enabled | default(true)
+
+- name: Disable swap
+  shell: |
+    swapoff -a
+    sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+  when: swap_disabled | default(true)
+
+- name: Load br_netfilter module
+  modprobe:
+    name: br_netfilter
+    state: present
+
+- name: Load overlay module
+  modprobe:
+    name: overlay
+    state: present
+
+- name: Ensure modules load on boot
+  copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      br_netfilter
+      overlay
+
+- name: Configure sysctl for Kubernetes
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+  loop:
+    - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { name: 'net.ipv4.ip_forward', value: '1' }
+
+- name: Configure DNS
+  copy:
+    dest: /etc/systemd/resolved.conf
+    content: |
+      [Resolve]
+      DNS={{ dns_servers | join(' ') }}
+      FallbackDNS=8.8.8.8 1.1.1.1
+      Cache=yes
+      DNSStubListener=yes
+  notify: restart systemd-resolved

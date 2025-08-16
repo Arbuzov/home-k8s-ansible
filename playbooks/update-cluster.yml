@@ -1,0 +1,77 @@
+---
+- name: Update Kubernetes Cluster
+  hosts: kubernetes_cluster
+  become: yes
+  gather_facts: yes
+  serial: 1
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: credentials.json
+
+  tasks:
+    - name: Update system packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        autoremove: yes
+        autoclean: yes
+
+    - name: Check current Kubernetes version
+      command: kubectl version --client --short
+      register: current_k8s_version
+      ignore_errors: yes
+
+    - name: Display current version
+      debug:
+        msg: "Current Kubernetes version: {{ current_k8s_version.stdout }}"
+      when: current_k8s_version.rc == 0
+
+    - name: Drain node (except master)
+      kubernetes.core.k8s_drain:
+        name: "{{ ansible_hostname }}"
+        force: yes
+        delete_emptydir_data: yes
+        ignore_daemonsets: yes
+        wait_timeout: 300
+      delegate_to: "{{ groups['masters'][0] }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: kubernetes_role != "master"
+
+    - name: Update Kubernetes packages
+      apt:
+        name:
+          - "kubelet={{ kubernetes_version }}.*"
+          - "kubeadm={{ kubernetes_version }}.*"
+          - "kubectl={{ kubernetes_version }}.*"
+        state: present
+        allow_downgrade: yes
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    - name: Uncordon node
+      kubernetes.core.k8s_uncordon:
+        name: "{{ ansible_hostname }}"
+      delegate_to: "{{ groups['masters'][0] }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: kubernetes_role != "master"
+
+    - name: Wait for node to be ready
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+        name: "{{ ansible_hostname }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 300
+      delegate_to: "{{ groups['masters'][0] }}"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf

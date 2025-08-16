@@ -1,0 +1,22 @@
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+authentication:
+  anonymous:
+    enabled: false
+  webhook:
+    enabled: true
+authorization:
+  mode: Webhook
+clusterDNS:
+  - 10.96.0.10
+clusterDomain: cluster.local
+cgroupDriver: systemd
+failSwapOn: false
+healthzBindAddress: 127.0.0.1
+healthzPort: 10248
+{% if kubernetes_role == 'worker' %}
+maxPods: {{ kubelet_max_pods | default(110) }}
+{% endif %}
+rotateCertificates: true
+serverTLSBootstrap: true
+staticPodPath: /etc/kubernetes/manifests

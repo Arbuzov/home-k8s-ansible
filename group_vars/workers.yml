@@ -1,0 +1,16 @@
+---
+# Настройки для worker нод
+kubernetes_role: "worker"
+
+# Kubelet настройки
+kubelet_max_pods: 110
+kubelet_pod_cidr: "{{ pod_subnet | default('10.244.0.0/16') }}"
+
+# Ресурсные лимиты для Pi 3
+resource_limits:
+  cpu: "1000m"
+  memory: "1Gi"
+
+# Настройки для ARM архитектуры
+arm_optimization: true
+enable_legacy_iptables: true

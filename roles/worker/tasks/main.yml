@@ -1,0 +1,29 @@
+---
+- name: Check if node is already joined to cluster
+  stat:
+    path: /etc/kubernetes/kubelet.conf
+  register: node_joined
+
+- name: Copy join command from local machine
+  copy:
+    src: ./kubeadm-join-command
+    dest: /tmp/kubeadm-join-command
+    mode: '0755'
+  when: not node_joined.stat.exists
+
+- name: Join node to cluster
+  command: "{{ lookup('file', './kubeadm-join-command') }}"
+  when: not node_joined.stat.exists
+
+- name: Verify node joined cluster
+  command: kubectl get nodes
+  register: cluster_nodes
+  delegate_to: "{{ groups['masters'][0] }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: not node_joined.stat.exists
+
+- name: Display cluster nodes
+  debug:
+    msg: "{{ cluster_nodes.stdout_lines }}"
+  when: cluster_nodes is defined

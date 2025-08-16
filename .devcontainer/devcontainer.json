@@ -1,0 +1,65 @@
+{
+  "name": "Kubernetes Ansible Development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.ansible",
+        "ms-python.python",
+        "ms-python.pylint",
+        "ms-python.flake8",
+        "redhat.vscode-yaml",
+        "ms-kubernetes-tools.vscode-kubernetes-tools",
+        "ms-vscode.vscode-json",
+        "streetsidesoftware.code-spell-checker",
+        "ms-vscode-remote.remote-ssh",
+        "ms-vscode.makefile-tools"
+      ],
+      "settings": {
+        "ansible.python.interpreterPath": "/usr/bin/python3",
+        "ansible.validation.enabled": true,
+        "ansible.validation.lint.enabled": true,
+        "ansible.validation.lint.path": "ansible-lint",
+        "yaml.schemas": {
+          "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/playbook": "playbooks/*.yml",
+          "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/tasks": "roles/*/tasks/*.yml",
+          "https://raw.githubusercontent.com/ansible/ansible-lint/main/src/ansiblelint/schemas/ansible.json#/$defs/handlers": "roles/*/handlers/*.yml"
+        },
+        "files.associations": {
+          "*.yml": "ansible",
+          "*.yaml": "ansible"
+        },
+        "python.defaultInterpreterPath": "/usr/bin/python3",
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      }
+    }
+  },
+  "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+    "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+  ],
+  "forwardPorts": [
+    8080,
+    9090,
+    3000
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "Web UI",
+      "protocol": "http"
+    },
+    "9090": {
+      "label": "Prometheus",
+      "protocol": "http"
+    },
+    "3000": {
+      "label": "Grafana",
+      "protocol": "http"
+    }
+  }
+}

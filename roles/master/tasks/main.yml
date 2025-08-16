@@ -1,0 +1,110 @@
+---
+- name: Check if cluster is already initialized
+  stat:
+    path: /etc/kubernetes/admin.conf
+  register: cluster_initialized
+
+- name: Initialize Kubernetes cluster
+  command: >
+    kubeadm init
+    --pod-network-cidr={{ kubernetes.pod_subnet | default('10.244.0.0/16') }}
+    --service-cidr={{ kubernetes.service_subnet | default('10.96.0.0/12') }}
+    --apiserver-advertise-address={{ kubernetes.api_server_advertise_address | default(ansible_default_ipv4.address) }}
+    --node-name={{ ansible_hostname }}
+  register: kubeadm_init
+  when: not cluster_initialized.stat.exists
+
+- name: Create .kube directory for root
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0755'
+
+- name: Copy admin.conf to root's kubeconfig
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: yes
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Create .kube directory for pi user
+  file:
+    path: /home/pi/.kube
+    state: directory
+    owner: pi
+    group: pi
+    mode: '0755'
+
+- name: Copy admin.conf to pi's kubeconfig
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /home/pi/.kube/config
+    remote_src: yes
+    owner: pi
+    group: pi
+    mode: '0644'
+
+- name: Remove master taint to allow scheduling on master
+  kubernetes.core.k8s_json_patch:
+    api_version: v1
+    kind: Node
+    name: "{{ ansible_hostname }}"
+    patch:
+      - op: remove
+        path: /spec/taints
+  when: master_schedulable | default(true)
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Install Flannel CNI
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: kube-flannel
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Apply Flannel CNI manifest
+  kubernetes.core.k8s:
+    state: present
+    src: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: kubernetes_cni == "flannel"
+
+- name: Generate join token
+  command: kubeadm token create --print-join-command
+  register: join_command
+  when: not cluster_initialized.stat.exists
+
+- name: Save join command to file
+  copy:
+    content: "{{ join_command.stdout }}"
+    dest: /tmp/kubeadm-join-command
+    mode: '0644'
+  when: join_command is defined
+
+- name: Fetch join command to local machine
+  fetch:
+    src: /tmp/kubeadm-join-command
+    dest: ./kubeadm-join-command
+    flat: yes
+  when: join_command is defined
+
+- name: Wait for cluster to be ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    name: "{{ ansible_hostname }}"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf

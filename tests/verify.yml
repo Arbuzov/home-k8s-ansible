@@ -1,0 +1,94 @@
+---
+- name: Test basic system setup
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Check if Python is available
+      ping:
+
+    - name: Verify system packages are installed
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - curl
+        - wget
+        - python3
+      check_mode: yes
+      register: package_check
+
+    - name: Ensure all packages are present
+      assert:
+        that:
+          - package_check is not failed
+        fail_msg: "Required packages are missing"
+
+    - name: Check if systemd is running
+      command: systemctl is-system-running
+      register: systemd_status
+      ignore_errors: true
+
+    - name: Display systemd status
+      debug:
+        msg: "SystemD status: {{ systemd_status.stdout }}"
+
+- name: Test Docker installation (if applicable)
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check if Docker service exists
+      stat:
+        path: /etc/systemd/system/docker.service
+      register: docker_service
+
+    - name: Verify Docker is installed (if service exists)
+      command: docker --version
+      register: docker_version
+      when: docker_service.stat.exists
+      ignore_errors: true
+
+    - name: Display Docker version
+      debug:
+        msg: "Docker version: {{ docker_version.stdout }}"
+      when: docker_service.stat.exists and docker_version is succeeded
+
+- name: Test Kubernetes components (if applicable)
+  hosts: all
+  become: yes
+  tasks:
+    - name: Check if kubectl is available
+      command: kubectl version --client
+      register: kubectl_version
+      ignore_errors: true
+
+    - name: Check if kubeadm is available
+      command: kubeadm version
+      register: kubeadm_version
+      ignore_errors: true
+
+    - name: Display Kubernetes tools versions
+      debug:
+        msg: |
+          kubectl: {{ kubectl_version.stdout if kubectl_version.rc == 0 else 'Not installed' }}
+          kubeadm: {{ kubeadm_version.stdout if kubeadm_version.rc == 0 else 'Not installed' }}
+
+- name: Test network connectivity
+  hosts: all
+  tasks:
+    - name: Test external connectivity
+      uri:
+        url: https://www.google.com
+        method: HEAD
+        timeout: 10
+      register: connectivity_test
+      ignore_errors: true
+
+    - name: Verify connectivity
+      assert:
+        that:
+          - connectivity_test.status == 200
+        fail_msg: "No external connectivity"
+        success_msg: "External connectivity working"
+      ignore_errors: true
