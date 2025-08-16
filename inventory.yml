@@ -4,7 +4,7 @@ all:
       children:
         masters:
           hosts:
-            pi4-master:
+            kube-master:
               ansible_host: 192.168.99.44
               node_role: master
               node_taints: []  # Мастер также является worker
@@ -12,12 +12,12 @@ all:
               kubernetes_major_minor: "1.33"
         workers:
           hosts:
-            pi3-worker1:
+            kube-worker-1:
               ansible_host: 192.168.99.101
               node_role: worker
               kubernetes_version: "1.33.1"
               kubernetes_major_minor: "1.33"
-            pi3-worker2:
+            kube-worker-2:
               ansible_host: 192.168.99.102
               node_role: worker
               kubernetes_version: "1.33.1"

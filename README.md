@@ -90,6 +90,7 @@ ansible-playbook playbooks/test-cluster.yml
 
 ### `common` - Базовая настройка системы
 - Обновление пакетов и настройка часового пояса
+- **Установка hostname** из inventory (kube-master, kube-worker-1, kube-worker-2)
 - **Настройка cgroups** (критично для Kubernetes на RPi)
 - **Полное отключение swap**
 - Загрузка модулей ядра и sysctl настройки
@@ -169,17 +170,17 @@ ansible-playbook playbooks/install-worker-with-join.yml --limit новая-но�
          children:
            masters:
              hosts:
-               pi4-master:
+               kube-master:
                  ansible_host: 192.168.1.100
                  kubernetes_version: "1.33.1"
                  kubernetes_major_minor: "1.33"
            workers:
              hosts:
-               pi3-worker1:
+               kube-worker-1:
                  ansible_host: 192.168.1.101
                  kubernetes_version: "1.33.1"
                  kubernetes_major_minor: "1.33"
-               pi3-worker2:
+               kube-worker-2:
                  ansible_host: 192.168.1.102
                  kubernetes_version: "1.33.1"  # Можно указать разные версии
                  kubernetes_major_minor: "1.33"
@@ -238,6 +239,12 @@ kubectl get nodes
 
 ### Критические настройки
 
+#### Hostname настройка
+Роль `common` автоматически:
+- Устанавливает hostname системы из `inventory_hostname`
+- Обновляет `/etc/hosts` для корректного разрешения имен
+- Имена нод: `kube-master`, `kube-worker-1`, `kube-worker-2`
+
 #### cgroups memory
 Роли автоматически добавляют в `/boot/firmware/cmdline.txt`:
 ```
@@ -263,7 +270,7 @@ cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
 #### Настройка версий Kubernetes
 Версии Kubernetes задаются **индивидуально для каждой ноды** в `inventory.yml`:
 ```yaml
-pi4-master:
+kube-master:
   kubernetes_version: "1.33.1"        # Точная версия пакета
   kubernetes_major_minor: "1.33"      # Мажорная.минорная для репозитория
 ```
@@ -283,16 +290,16 @@ Kubernetes поддерживает ограниченное различие в
 #### Примеры конфигураций
 ```yaml
 # Одинаковые версии (рекомендуется)
-pi4-master:    kubernetes_version: "1.33.1"
-pi3-worker1:   kubernetes_version: "1.33.1"
+kube-master:    kubernetes_version: "1.33.1"
+kube-worker-1:   kubernetes_version: "1.33.1"
 
 # Допустимое различие
-pi4-master:    kubernetes_version: "1.33.1"  # Новая версия
-pi3-worker1:   kubernetes_version: "1.32.5"  # Старая версия (OK)
+kube-master:    kubernetes_version: "1.33.1"  # Новая версия
+kube-worker-1:   kubernetes_version: "1.32.5"  # Старая версия (OK)
 
 # Недопустимо
-pi4-master:    kubernetes_version: "1.32.1"  # Старая версия
-pi3-worker1:   kubernetes_version: "1.33.1"  # Новая версия (ERROR!)
+kube-master:    kubernetes_version: "1.32.1"  # Старая версия
+kube-worker-1:   kubernetes_version: "1.33.1"  # Новая версия (ERROR!)
 ```
 
 ### Безопасность
@@ -307,12 +314,12 @@ pi3-worker1:   kubernetes_version: "1.33.1"  # Новая версия (ERROR!)
 ```bash
 # Обновить конкретную ноду до указанной версии
 ansible-playbook playbooks/update-single-node.yml \
-  -e target_host=pi4-master \
+  -e target_host=kube-master \
   -e kubernetes_target_version=1.29
 
 # С дополнительными опциями
 ansible-playbook playbooks/update-single-node.yml \
-  -e target_host=pi3-worker1 \
+  -e target_host=kube-worker-1 \
   -e kubernetes_target_version=1.29 \
   -e drain_node=true \
   -e update_system_packages=true
@@ -338,7 +345,7 @@ ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
 ```bash
 # Откатить ноду к предыдущей версии
 ansible-playbook playbooks/rollback-node.yml \
-  -e target_host=pi3-worker1 \
+  -e target_host=kube-worker-1 \
   -e rollback_version=1.28
 ```
 
@@ -354,13 +361,13 @@ ansible-playbook site.yml --tags install
 ansible-playbook playbooks/update-cluster.yml
 
 # Обновление одной ноды до конкретной версии
-ansible-playbook playbooks/update-single-node.yml -e target_host=pi4-master -e kubernetes_target_version=1.29
+ansible-playbook playbooks/update-single-node.yml -e target_host=kube-master -e kubernetes_target_version=1.29
 
 # Обновление нескольких нод с разными версиями
 ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
 
 # Откат ноды к предыдущей версии
-ansible-playbook playbooks/rollback-node.yml -e target_host=pi3-worker1 -e rollback_version=1.28
+ansible-playbook playbooks/rollback-node.yml -e target_host=kube-worker-1 -e rollback_version=1.28
 
 # Проверка состояния кластера
 ansible-playbook playbooks/maintenance.yml --tags check

@@ -11,7 +11,7 @@
 
     - name: Validate target_host is specified
       fail:
-        msg: "Please specify target_host variable: ansible-playbook playbooks/update-single-node.yml -e target_host=pi4-master"
+        msg: "Please specify target_host variable: ansible-playbook playbooks/update-single-node.yml -e target_host=kube-master"
       when: target_host is not defined
 
     - name: Validate kubernetes_target_version is specified
@@ -55,7 +55,7 @@
       delegate_to: "{{ groups['masters'][0] }}"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      when: 
+      when:
         - is_worker_node or (is_master_node and groups['masters'] | length > 1)
         - drain_node | default(true)
 
@@ -150,7 +150,7 @@
       delegate_to: "{{ groups['masters'][0] }}"
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      when: 
+      when:
         - is_worker_node or (is_master_node and groups['masters'] | length > 1)
         - drain_node | default(true)
 

@@ -22,7 +22,7 @@ ansible-playbook playbooks/install-worker-with-join.yml \
 ### С конкретными нодами
 ```bash
 ansible-playbook playbooks/install-worker-with-join.yml \
-  --limit pi3-worker2,pi4-master \
+  --limit kube-worker-2,kube-master \
   -e @credentials.json
 ```
 
@@ -31,25 +31,25 @@ ansible-playbook playbooks/install-worker-with-join.yml \
 # Только установка компонентов
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags worker-setup \
-  --limit pi3-worker2 \
+  --limit kube-worker-2 \
   -e @credentials.json
 
 # Только генерация токена
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags join-token \
-  --limit pi4-master \
+  --limit kube-master \
   -e @credentials.json
 
 # Только присоединение
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags worker-join \
-  --limit pi3-worker2,pi4-master \
+  --limit kube-worker-2,kube-master \
   -e @credentials.json
 
 # Только добавление метки
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags label \
-  --limit pi3-worker2,pi4-master \
+  --limit kube-worker-2,kube-master \
   -e @credentials.json
 ```
 
@@ -104,8 +104,8 @@ kubectl get nodes
 
 # Ожидаемый результат:
 # NAME            STATUS   ROLES                  AGE   VERSION
-# pi4-master      Ready    control-plane,worker   5d    v1.33.1
-# pi3-worker1     Ready    worker                 5d    v1.33.1
+# kube-master      Ready    control-plane,worker   5d    v1.33.1
+# kube-worker-1     Ready    worker                 5d    v1.33.1
 # новая-нода      Ready    worker                 1m    v1.33.1
 ```
 
