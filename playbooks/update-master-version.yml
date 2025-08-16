@@ -1,0 +1,127 @@
+---
+- name: Update Kubernetes version on master node
+  hosts: "{{ target_node | default('kube-master') }}"
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Display current master node info
+      debug:
+        msg: |
+          Updating master node: {{ inventory_hostname }}
+          Current K8s version: {{ kubernetes_version }}
+          Target major.minor: {{ kubernetes_major_minor }}
+
+    - name: Check if this is a master node
+      fail:
+        msg: "This playbook can only be run on master nodes"
+      when: "'master' not in node_role"
+
+    - name: Unhold Kubernetes packages before update
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Update kubeadm package first
+      apt:
+        name: "kubeadm={{ kubernetes_version }}-1.1"
+        state: present
+        update_cache: yes
+        allow_change_held_packages: yes
+
+    - name: Check kubeadm version
+      shell: kubeadm version -o short
+      register: kubeadm_version_check
+
+    - name: Display kubeadm version
+      debug:
+        msg: "kubeadm version: {{ kubeadm_version_check.stdout }}"
+
+    - name: Plan the upgrade
+      shell: kubeadm upgrade plan
+      register: upgrade_plan
+      failed_when: false
+
+    - name: Display upgrade plan
+      debug:
+        msg: "{{ upgrade_plan.stdout_lines }}"
+
+    - name: Apply the upgrade
+      shell: "kubeadm upgrade apply v{{ kubernetes_version }} -y"
+      register: upgrade_result
+
+    - name: Display upgrade result
+      debug:
+        msg: "{{ upgrade_result.stdout_lines }}"
+
+    - name: Update kubelet and kubectl packages
+      apt:
+        name:
+          - "kubelet={{ kubernetes_version }}-1.1"
+          - "kubectl={{ kubernetes_version }}-1.1"
+        state: present
+        allow_change_held_packages: yes
+
+    - name: Hold Kubernetes packages after update
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    - name: Wait for kubelet to be ready
+      wait_for:
+        port: 10250
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 120
+
+    - name: Wait for API server to be ready
+      uri:
+        url: "https://{{ ansible_default_ipv4.address }}:6443/healthz"
+        validate_certs: no
+        status_code: 200
+      register: api_health
+      until: api_health.status == 200
+      retries: 30
+      delay: 10
+
+    - name: Verify master node status
+      shell: kubectl get nodes {{ inventory_hostname }} -o wide
+      register: node_status
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Display final master node status
+      debug:
+        msg: "{{ node_status.stdout_lines }}"
+
+    - name: Verify cluster components
+      shell: kubectl get componentstatuses
+      register: component_status
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      failed_when: false
+
+    - name: Display component status
+      debug:
+        msg: "{{ component_status.stdout_lines }}"
+
+  handlers:
+    - name: restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
