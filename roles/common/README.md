@@ -5,6 +5,8 @@
 
 ## Задачи
 - Обновление пакетного кэша и установка системных пакетов
+- **Установка hostname** из inventory_hostname
+- **Обновление /etc/hosts** с новым hostname
 - Настройка часового пояса
 - Настройка GPU memory split для Raspberry Pi
 - **Включение cgroup memory и cpuset** для Kubernetes
@@ -19,6 +21,7 @@
 - `arm_memory_split`: память для GPU на ARM (по умолчанию: 16)
 - `cgroup_enabled`: включить cgroup настройки (по умолчанию: true)
 - `swap_disabled`: отключить swap (по умолчанию: true)
+- `inventory_hostname`: используется для установки hostname системы
 
 ## Критически важные изменения
 ### cgroup настройки

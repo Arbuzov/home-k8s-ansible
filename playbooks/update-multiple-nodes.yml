@@ -6,15 +6,15 @@
     # Пример конфигурации обновлений
     # Переопределите через -e или в group_vars
     node_updates:
-      pi4-master:
+      kube-master:
         version: "1.29"
         drain: false  # Не drain единственную master ноду
         system_update: true
-      pi3-worker1:
+      kube-worker-1:
         version: "1.29"
         drain: true
         system_update: true
-      pi3-worker2:
+      kube-worker-2:
         version: "1.28"  # Можно обновлять до разных версий
         drain: true
         system_update: false

@@ -3,19 +3,19 @@
 # ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
 
 node_updates:
-  pi4-master:
+  kube-master:
     version: "1.29"              # Версия Kubernetes для обновления
     drain: false                 # Не drain master ноду (если она единственная)
     system_update: true          # Обновить системные пакеты
     apply_upgrade: true          # Применить kubeadm upgrade
-    
-  pi3-worker1:
+
+  kube-worker-1:
     version: "1.29"
     drain: true                  # Drain ноду перед обновлением
     system_update: true
     apply_upgrade: true
-    
-  pi3-worker2:
+
+  kube-worker-2:
     version: "1.28"              # Можно обновлять до разных версий
     drain: true
     system_update: false         # Не обновлять системные пакеты

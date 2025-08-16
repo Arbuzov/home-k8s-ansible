@@ -20,6 +20,11 @@
 - Соблюдение Kubernetes version skew policy
 - Удалены глобальные версии из group_vars/all.yml
 
+### ✅ Добавлена автоматическая настройка hostname:
+- **Установка hostname** из inventory_hostname (kube-master, kube-worker-1, kube-worker-2)
+- **Обновление /etc/hosts** для корректного разрешения имен
+- Унифицированные имена нод кластера
+
 ### ✅ Исправлены критические проблемы совместимости:
 - containerd CRI API (удален из disabled_plugins)
 - SystemdCgroup = true для Kubernetes

@@ -10,6 +10,18 @@
     autoremove: yes
     autoclean: yes
 
+- name: Set hostname from inventory
+  hostname:
+    name: "{{ inventory_hostname }}"
+  notify: reboot system
+
+- name: Update /etc/hosts with new hostname
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+    backup: yes
+
 - name: Install system packages
   apt:
     name: "{{ system_packages }}"

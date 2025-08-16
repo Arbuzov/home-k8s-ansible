@@ -6,6 +6,8 @@
 - Raspberry Pi OS 64-bit (Bookworm) на всех нодах
 - SSH доступ ко всем нодам
 
+⚠️ **Важно**: Имена хостов будут автоматически изменены на `kube-master`, `kube-worker-1`, `kube-worker-2`
+
 ## ⚡ Быстрая установка
 
 ### 1. Подготовка
@@ -36,17 +38,17 @@ all:
   children:
     masters:
       hosts:
-        pi4-master:
+        kube-master:
           ansible_host: 192.168.1.100
           kubernetes_version: "1.33.1"     # Версия K8s для мастера
           kubernetes_major_minor: "1.33"
     workers:
       hosts:
-        pi3-worker1:
+        kube-worker-1:
           ansible_host: 192.168.1.101
           kubernetes_version: "1.33.1"     # Версия K8s для worker
           kubernetes_major_minor: "1.33"
-        pi3-worker2:
+        kube-worker-2:
           ansible_host: 192.168.1.102
           kubernetes_version: "1.33.1"     # Можно указать разные версии
           kubernetes_major_minor: "1.33"
@@ -58,17 +60,17 @@ all:
 ```yaml
     masters:
       hosts:
-        pi4-master:
+        kube-master:
           ansible_host: 192.168.1.100
           kubernetes_version: "1.33.1"     # Мастер на последней версии
           kubernetes_major_minor: "1.33"
     workers:
       hosts:
-        pi3-worker1:
+        kube-worker-1:
           ansible_host: 192.168.1.101
           kubernetes_version: "1.32.1"     # Worker на предыдущей версии
           kubernetes_major_minor: "1.32"   # Поддерживается skew policy
-        pi3-worker2:
+        kube-worker-2:
           ansible_host: 192.168.1.102
           kubernetes_version: "1.33.1"     # Worker на той же версии что мастер
           kubernetes_major_minor: "1.33"
@@ -93,9 +95,9 @@ kubectl get nodes
 
 # Ожидаемый результат:
 # NAME            STATUS   ROLES                  AGE   VERSION
-# pi4-master      Ready    control-plane,worker   5m    v1.33.1
-# pi3-worker1     Ready    worker                 3m    v1.33.1
-# pi3-worker2     Ready    worker                 2m    v1.33.1
+# kube-master      Ready    control-plane,worker   5m    v1.33.1
+# kube-worker-1     Ready    worker                 3m    v1.33.1
+# kube-worker-2     Ready    worker                 2m    v1.33.1
 ```
 
 ## 🔧 Добавление новой worker ноды
@@ -103,7 +105,7 @@ kubectl get nodes
 ```bash
 # Установите и присоедините новую ноду
 ansible-playbook playbooks/install-worker-with-join.yml \
-  --limit новая-нода,pi4-master \
+  --limit новая-нода,kube-master \
   -e @credentials.json
 ```
 
@@ -194,7 +196,7 @@ ansible-playbook playbooks/maintenance.yml --tags cleanup
 Для обновления конкретной ноды измените версию в inventory и запустите:
 ```bash
 # Обновить только одну ноду
-ansible-playbook playbooks/update-single-node.yml -l pi3-worker1
+ansible-playbook playbooks/update-single-node.yml -l kube-worker-1
 
 # Обновить несколько нод
 ansible-playbook playbooks/update-multiple-nodes.yml -l workers
