@@ -25,6 +25,12 @@
 - **Обновление /etc/hosts** для корректного разрешения имен
 - Унифицированные имена нод кластера
 
+### ✅ Упрощена структура переменных:
+- **Плоский credentials.json** с прямыми ansible_* переменными
+- **Упрощенные имена** kubernetes_pod_subnet, kubernetes_api_server_advertise_address
+- **Легкое подключение** переменных через -e @credentials.json
+- Обновлена документация по конфигурации
+
 ### ✅ Исправлены критические проблемы совместимости:
 - containerd CRI API (удален из disabled_plugins)
 - SystemdCgroup = true для Kubernetes

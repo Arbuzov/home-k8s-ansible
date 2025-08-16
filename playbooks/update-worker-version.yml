@@ -1,0 +1,74 @@
+---
+- name: Update Kubernetes version on specific worker node
+  hosts: "{{ target_node | default('kube-worker-2') }}"
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Display current node info
+      debug:
+        msg: |
+          Updating node: {{ inventory_hostname }}
+          Current K8s version: {{ kubernetes_version }}
+          Target major.minor: {{ kubernetes_major_minor }}
+
+    - name: Drain the node (prepare for maintenance)
+      shell: |
+        kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data --force
+      delegate_to: "{{ groups['masters'][0] }}"
+      when: drain_node | default(true)
+
+    - name: Update Kubernetes packages
+      apt:
+        name:
+          - "kubelet={{ kubernetes_version }}-1.1"
+          - "kubeadm={{ kubernetes_version }}-1.1"
+          - "kubectl={{ kubernetes_version }}-1.1"
+        state: present
+        update_cache: yes
+      notify: restart kubelet
+
+    - name: Update kubelet configuration
+      shell: |
+        kubeadm upgrade node
+      register: upgrade_result
+
+    - name: Display upgrade result
+      debug:
+        msg: "{{ upgrade_result.stdout_lines }}"
+
+    - name: Restart kubelet service
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes
+
+    - name: Wait for kubelet to be ready
+      wait_for:
+        port: 10250
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 120
+
+    - name: Uncordon the node (return to service)
+      shell: |
+        kubectl uncordon {{ inventory_hostname }}
+      delegate_to: "{{ groups['masters'][0] }}"
+      when: drain_node | default(true)
+
+    - name: Verify node status
+      shell: |
+        kubectl get nodes {{ inventory_hostname }} -o wide
+      delegate_to: "{{ groups['masters'][0] }}"
+      register: node_status
+
+    - name: Display final node status
+      debug:
+        msg: "{{ node_status.stdout_lines }}"
+
+  handlers:
+    - name: restart kubelet
+      systemd:
+        name: kubelet
+        state: restarted
+        daemon_reload: yes

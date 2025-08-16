@@ -62,8 +62,8 @@ ansible-playbook playbooks/test-cluster.yml
 ```text
 .
 ├── ansible.cfg                 # Конфигурация Ansible
-├── credentials.json            # Креды (игнорируется Git)
-├── credentials.json.example    # Пример файла с кредами
+├── credentials.json            # Плоские переменные для Ansible (игнорируется Git)
+├── credentials.json.example    # Пример файла с переменными
 ├── inventory.yml               # Инвентарь серверов
 ├── site.yml                    # Основной playbook
 ├── requirements.yml            # Требования Ansible коллекций
@@ -141,7 +141,36 @@ ansible-playbook playbooks/install-worker-with-join.yml --limit новая-но�
 - ✅ Присоединение к кластеру без игнорирования preflight проверок
 - ✅ Автоматическое добавление метки `node-role.kubernetes.io/worker`
 
-## 🚀 Быстрый старт
+## � Конфигурация переменных
+
+### Файл credentials.json
+Все переменные используют плоскую структуру для простого подключения:
+
+```json
+{
+  "ansible_user": "pi",                                    // SSH пользователь
+  "ansible_password": "YOUR_PASSWORD",                     // SSH пароль (опционально)
+  "ansible_ssh_private_key_file": "~/.ssh/id_rsa",        // SSH ключ (опционально)
+  "ansible_ssh_public_key_file": "~/.ssh/id_rsa.pub",     // Публичный SSH ключ
+  "kubernetes_cluster_name": "raspberry-k8s",             // Имя кластера
+  "kubernetes_pod_subnet": "10.244.0.0/16",               // Подсеть для подов
+  "kubernetes_service_subnet": "10.96.0.0/12",            // Подсеть для сервисов
+  "kubernetes_api_server_advertise_address": "192.168.1.100",  // IP мастера
+  "containerd_data_root": "/var/lib/containerd",           // Путь к данным containerd
+  "registry_mirror": "https://registry-1.docker.io"       // Mirror реестра
+}
+```
+
+### Использование переменных
+```bash
+# Подключение файла с переменными
+ansible-playbook site.yml -e @credentials.json
+
+# Переопределение отдельных переменных
+ansible-playbook site.yml -e @credentials.json -e kubernetes_cluster_name=my-cluster
+```
+
+## �🚀 Быстрый старт
 
 ### Полная установка кластера
 
@@ -153,7 +182,20 @@ ansible-playbook playbooks/install-worker-with-join.yml --limit новая-но�
 2. **Создайте файл с кредами:**
    ```bash
    cp credentials.json.example credentials.json
-   # Отредактируйте credentials.json с вашими SSH кредами
+   # Отредактируйте credentials.json с вашими параметрами
+   ```
+
+   Пример конфигурации `credentials.json`:
+   ```json
+   {
+     "ansible_user": "pi",
+     "ansible_password": "YOUR_PASSWORD_HERE",
+     "ansible_ssh_private_key_file": "~/.ssh/id_rsa",
+     "kubernetes_cluster_name": "raspberry-k8s",
+     "kubernetes_pod_subnet": "10.244.0.0/16",
+     "kubernetes_service_subnet": "10.96.0.0/12",
+     "kubernetes_api_server_advertise_address": "192.168.1.100"
+   }
    ```
 
 3. **Настройте инвентарь:**
