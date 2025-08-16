@@ -1,0 +1,24 @@
+---
+# Настройки для master нод
+kubernetes_role: "master"
+
+# API Server настройки
+api_server_bind_port: 6443
+api_server_cert_extra_sans:
+  - "{{ ansible_default_ipv4.address }}"
+  - "{{ ansible_hostname }}"
+  - "localhost"
+  - "127.0.0.1"
+
+# etcd настройки
+etcd_data_dir: "/var/lib/etcd"
+
+# Scheduler и Controller Manager
+scheduler_bind_address: "0.0.0.0"
+controller_manager_bind_address: "0.0.0.0"
+
+# Разрешить запуск подов на master ноде
+master_schedulable: true
+
+# Taints для master ноды (пустой массив означает, что поды могут запускаться)
+master_taints: []

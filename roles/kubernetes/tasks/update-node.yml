@@ -1,0 +1,126 @@
+---
+# Общие задачи для обновления ноды
+- name: Check current Kubernetes version
+  shell: kubectl version --client --short 2>/dev/null || echo "Not installed"
+  register: current_k8s_version
+  ignore_errors: true
+
+- name: Display current version
+  debug:
+    msg: "Current: {{ current_k8s_version.stdout }} → Target: {{ kubernetes_target_version }}"
+
+- name: Check if node is master
+  set_fact:
+    is_master_node: "{{ inventory_hostname in groups['masters'] }}"
+
+- name: Check if node is worker
+  set_fact:
+    is_worker_node: "{{ inventory_hostname in groups['workers'] }}"
+
+- name: Drain node before update
+  kubernetes.core.k8s_drain:
+    name: "{{ ansible_hostname }}"
+    force: yes
+    delete_emptydir_data: yes
+    ignore_daemonsets: yes
+    wait_timeout: 600
+  delegate_to: "{{ groups['masters'][0] }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: 
+    - drain_node | default(true)
+    - is_worker_node or (is_master_node and groups['masters'] | length > 1)
+
+- name: Update system packages
+  apt:
+    update_cache: yes
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+  when: update_system_packages | default(true)
+
+- name: Unhold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+  ignore_errors: true
+
+- name: Update Kubernetes packages
+  apt:
+    name:
+      - "kubelet={{ kubernetes_target_version }}.*"
+      - "kubeadm={{ kubernetes_target_version }}.*"
+      - "kubectl={{ kubernetes_target_version }}.*"
+    state: present
+    allow_downgrade: yes
+    force: yes
+
+- name: Hold Kubernetes packages
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop:
+    - kubelet
+    - kubeadm
+    - kubectl
+
+- name: Restart kubelet
+  systemd:
+    name: kubelet
+    state: restarted
+    daemon_reload: yes
+
+- name: Upgrade master components
+  block:
+    - name: Plan kubeadm upgrade
+      command: "kubeadm upgrade plan v{{ kubernetes_target_version }}.0"
+      register: upgrade_plan
+      when: check_upgrade_plan | default(true)
+
+    - name: Apply kubeadm upgrade
+      command: "kubeadm upgrade apply v{{ kubernetes_target_version }}.0 -y"
+      register: upgrade_result
+      when: apply_upgrade | default(true)
+
+  when: is_master_node
+
+- name: Upgrade worker components
+  command: "kubeadm upgrade node"
+  register: worker_upgrade_result
+  when: is_worker_node
+
+- name: Uncordon node
+  kubernetes.core.k8s_uncordon:
+    name: "{{ ansible_hostname }}"
+  delegate_to: "{{ groups['masters'][0] }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: 
+    - drain_node | default(true)
+    - is_worker_node or (is_master_node and groups['masters'] | length > 1)
+
+- name: Wait for node ready
+  kubernetes.core.k8s_info:
+    api_version: v1
+    kind: Node
+    name: "{{ ansible_hostname }}"
+    wait: true
+    wait_condition:
+      type: Ready
+      status: "True"
+    wait_timeout: 300
+  delegate_to: "{{ groups['masters'][0] }}"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Verify updated version
+  shell: kubectl version --client --short
+  register: updated_k8s_version
+
+- name: Display update result
+  debug:
+    msg: "✅ {{ inventory_hostname }}: {{ current_k8s_version.stdout }} → {{ updated_k8s_version.stdout }}"

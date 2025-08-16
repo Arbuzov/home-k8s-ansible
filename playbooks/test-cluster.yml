@@ -1,0 +1,129 @@
+---
+- name: Test Kubernetes Cluster
+  hosts: masters
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Create test namespace
+      kubernetes.core.k8s:
+        name: ansible-test
+        api_version: v1
+        kind: Namespace
+        state: present
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Deploy test nginx pod
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: nginx-test
+            namespace: ansible-test
+          spec:
+            replicas: 2
+            selector:
+              matchLabels:
+                app: nginx-test
+            template:
+              metadata:
+                labels:
+                  app: nginx-test
+              spec:
+                containers:
+                - name: nginx
+                  image: nginx:alpine
+                  ports:
+                  - containerPort: 80
+                  resources:
+                    requests:
+                      memory: "64Mi"
+                      cpu: "50m"
+                    limits:
+                      memory: "128Mi"
+                      cpu: "100m"
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Create test service
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: nginx-test-service
+            namespace: ansible-test
+          spec:
+            selector:
+              app: nginx-test
+            ports:
+            - port: 80
+              targetPort: 80
+            type: ClusterIP
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Wait for deployment to be ready
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: nginx-test
+        namespace: ansible-test
+        wait: true
+        wait_condition:
+          type: Available
+          status: "True"
+        wait_timeout: 300
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Get test pods
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: ansible-test
+        label_selectors:
+          - app=nginx-test
+      register: test_pods
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Display test results
+      debug:
+        msg: |
+          ✅ Тест кластера прошел успешно!
+          📊 Запущено подов: {{ test_pods.resources | length }}
+          🔗 Поды распределены по нодам:
+          {% for pod in test_pods.resources %}
+          - {{ pod.metadata.name }} на ноде {{ pod.spec.nodeName }}
+          {% endfor %}
+
+    - name: Test pod connectivity
+      kubernetes.core.k8s_exec:
+        namespace: ansible-test
+        pod: "{{ test_pods.resources[0].metadata.name }}"
+        command: |
+          wget -qO- nginx-test-service.ansible-test.svc.cluster.local:80 | head -1
+      register: connectivity_test
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+
+    - name: Display connectivity test
+      debug:
+        msg: |
+          🌐 Тест связности: {{ 'ПРОШЕЛ' if connectivity_test.rc == 0 else 'НЕ ПРОШЕЛ' }}
+          📝 Ответ: {{ connectivity_test.stdout | default('Нет ответа') }}
+
+    - name: Cleanup test resources
+      kubernetes.core.k8s:
+        state: absent
+        api_version: v1
+        kind: Namespace
+        name: ansible-test
+      environment:
+        KUBECONFIG: /etc/kubernetes/admin.conf
+      when: cleanup_test | default(true)

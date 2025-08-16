@@ -1,0 +1,55 @@
+---
+- name: Rollback Node to Previous Kubernetes Version
+  hosts: "{{ target_host | default('all') }}"
+  become: yes
+  gather_facts: yes
+  serial: 1
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: credentials.json
+
+    - name: Validate target_host is specified
+      fail:
+        msg: "Please specify target_host: ansible-playbook playbooks/rollback-node.yml -e target_host=pi4-master"
+      when: target_host is not defined
+
+    - name: Validate rollback_version is specified
+      fail:
+        msg: "Please specify rollback_version: ansible-playbook playbooks/rollback-node.yml -e rollback_version=1.28"
+      when: rollback_version is not defined
+
+    - name: Confirm rollback
+      pause:
+        prompt: |
+          ⚠️  WARNING: You are about to rollback {{ inventory_hostname }} to Kubernetes {{ rollback_version }}
+          This operation may cause downtime and data loss.
+          Are you sure? Press ENTER to continue or Ctrl+C to abort
+
+  tasks:
+    - name: Check current version
+      shell: kubectl version --client --short
+      register: current_version
+      ignore_errors: true
+
+    - name: Display rollback information
+      debug:
+        msg: |
+          🔄 Rolling back: {{ inventory_hostname }}
+          📦 Current: {{ current_version.stdout | default('Unknown') }}
+          📦 Target: {{ rollback_version }}
+
+    - name: Set rollback variables
+      set_fact:
+        kubernetes_target_version: "{{ rollback_version }}"
+        drain_node: true
+        update_system_packages: false
+        apply_upgrade: true
+
+    - name: Include rollback tasks
+      include_tasks: ../roles/kubernetes/tasks/update-node.yml
+
+  post_tasks:
+    - name: Verify rollback success
+      debug:
+        msg: "✅ Rollback completed for {{ inventory_hostname }}"

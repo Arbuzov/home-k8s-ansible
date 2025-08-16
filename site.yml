@@ -1,0 +1,55 @@
+---
+- name: Setup Kubernetes Cluster on Raspberry Pi
+  hosts: kubernetes_cluster
+  become: yes
+  gather_facts: yes
+  serial: "{{ ansible_play_batch | length }}"
+
+  pre_tasks:
+    - name: Load credentials
+      include_vars: credentials.json
+      tags: always
+
+  roles:
+    - role: common
+      tags: [install, update, common]
+    - role: containerd
+      tags: [install, containerd]
+    - role: kubernetes
+      tags: [install, kubernetes]
+
+- name: Configure Kubernetes Master
+  hosts: masters
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: master
+      tags: [install, master]
+
+- name: Configure Kubernetes Workers
+  hosts: workers
+  become: yes
+  gather_facts: yes
+
+  roles:
+    - role: worker
+      tags: [install, worker]
+
+- name: Post-installation tasks
+  hosts: masters
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Get cluster status
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Node
+      register: cluster_nodes
+      tags: [install, check]
+
+    - name: Display cluster status
+      debug:
+        msg: "Cluster has {{ cluster_nodes.resources | length }} nodes"
+      tags: [install, check]
