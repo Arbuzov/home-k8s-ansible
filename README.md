@@ -354,6 +354,11 @@ kube-worker-1:   kubernetes_version: "1.33.1"  # Новая версия (ERROR!
 ### Обновление одной ноды
 
 ```bash
+# Быстрое обновление worker ноды (использует версию из inventory.yml)
+ansible-playbook playbooks/update-worker-version.yml \
+  -l kube-worker-2 \
+  -e @credentials.json
+
 # Обновить конкретную ноду до указанной версии
 ansible-playbook playbooks/update-single-node.yml \
   -e target_host=kube-master \
@@ -366,6 +371,8 @@ ansible-playbook playbooks/update-single-node.yml \
   -e drain_node=true \
   -e update_system_packages=true
 ```
+
+💡 **Совет**: Плейбук `update-worker-version.yml` автоматически использует версии из `inventory.yml`
 
 ### Обновление нескольких нод с разными версиями
 

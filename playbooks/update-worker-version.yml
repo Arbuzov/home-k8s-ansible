@@ -18,6 +18,15 @@
       delegate_to: "{{ groups['masters'][0] }}"
       when: drain_node | default(true)
 
+    - name: Unhold Kubernetes packages before update
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: install
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
+
     - name: Update Kubernetes packages
       apt:
         name:
@@ -26,7 +35,17 @@
           - "kubectl={{ kubernetes_version }}-1.1"
         state: present
         update_cache: yes
+        allow_change_held_packages: yes
       notify: restart kubelet
+
+    - name: Hold Kubernetes packages after update
+      dpkg_selections:
+        name: "{{ item }}"
+        selection: hold
+      loop:
+        - kubelet
+        - kubeadm
+        - kubectl
 
     - name: Update kubelet configuration
       shell: |
