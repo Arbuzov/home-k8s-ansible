@@ -15,7 +15,7 @@ all:
             kube-worker-1:
               ansible_host: 192.168.99.101
               node_role: worker
-              kubernetes_version: "1.33.1"
+              kubernetes_version: "1.33.4"
               kubernetes_major_minor: "1.33"
             kube-worker-2:
               ansible_host: 192.168.99.102
