@@ -38,13 +38,43 @@ all:
       hosts:
         pi4-master:
           ansible_host: 192.168.1.100
+          kubernetes_version: "1.33.1"     # Версия K8s для мастера
+          kubernetes_major_minor: "1.33"
     workers:
       hosts:
         pi3-worker1:
           ansible_host: 192.168.1.101
+          kubernetes_version: "1.33.1"     # Версия K8s для worker
+          kubernetes_major_minor: "1.33"
         pi3-worker2:
           ansible_host: 192.168.1.102
+          kubernetes_version: "1.33.1"     # Можно указать разные версии
+          kubernetes_major_minor: "1.33"
 ```
+
+⚠️ **Важно**: Версии Kubernetes теперь задаются для каждой ноды индивидуально!
+
+Пример смешанного кластера с разными версиями:
+```yaml
+    masters:
+      hosts:
+        pi4-master:
+          ansible_host: 192.168.1.100
+          kubernetes_version: "1.33.1"     # Мастер на последней версии
+          kubernetes_major_minor: "1.33"
+    workers:
+      hosts:
+        pi3-worker1:
+          ansible_host: 192.168.1.101
+          kubernetes_version: "1.32.1"     # Worker на предыдущей версии
+          kubernetes_major_minor: "1.32"   # Поддерживается skew policy
+        pi3-worker2:
+          ansible_host: 192.168.1.102
+          kubernetes_version: "1.33.1"     # Worker на той же версии что мастер
+          kubernetes_major_minor: "1.33"
+```
+
+📋 **Политика версий**: Воркеры могут быть на 1 минорную версию ниже мастера (K8s version skew policy).
 
 ### 4. Установка кластера
 ```bash
@@ -157,3 +187,37 @@ ansible-playbook playbooks/maintenance.yml --tags cleanup
 ```
 
 Готово! Ваш Kubernetes кластер на Raspberry Pi готов к использованию.
+
+## Управление версиями
+
+### Обновление отдельных нод
+Для обновления конкретной ноды измените версию в inventory и запустите:
+```bash
+# Обновить только одну ноду
+ansible-playbook playbooks/update-single-node.yml -l pi3-worker1
+
+# Обновить несколько нод
+ansible-playbook playbooks/update-multiple-nodes.yml -l workers
+```
+
+### Миграция на новую версию
+1. Измените `kubernetes_version` и `kubernetes_major_minor` в inventory.yml
+2. Сначала обновите worker ноды:
+   ```bash
+   ansible-playbook playbooks/update-cluster.yml --limit workers
+   ```
+3. Затем обновите master:
+   ```bash
+   ansible-playbook playbooks/update-cluster.yml --limit masters
+   ```
+
+### Проверка совместимости версий
+```bash
+# Проверка текущих версий всех нод
+kubectl get nodes -o wide
+
+# Проверка компонентов кластера
+kubectl version
+```
+
+💡 **Совет**: Всегда тестируйте обновления сначала на одном worker узле!
