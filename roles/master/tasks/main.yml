@@ -8,9 +8,9 @@
 - name: Initialize Kubernetes cluster
   command: >
     kubeadm init
-    --pod-network-cidr={{ kubernetes.pod_subnet | default('10.244.0.0/16') }}
-    --service-cidr={{ kubernetes.service_subnet | default('10.96.0.0/12') }}
-    --apiserver-advertise-address={{ kubernetes.api_server_advertise_address | default(ansible_default_ipv4.address) }}
+    --pod-network-cidr={{ kubernetes_pod_subnet | default('10.244.0.0/16') }}
+    --service-cidr={{ kubernetes_service_subnet | default('10.96.0.0/12') }}
+    --apiserver-advertise-address={{ kubernetes_api_server_advertise_address | default(ansible_default_ipv4.address) }}
     --node-name={{ ansible_hostname }}
   register: kubeadm_init
   when: not cluster_initialized.stat.exists

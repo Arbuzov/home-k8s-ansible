@@ -30,7 +30,7 @@ all:
             kube-worker-2:
               ansible_host: 192.168.99.102
               node_role: worker
-              kubernetes_version: "1.33.1"  # Можно указать другую патч-версию
+              kubernetes_version: "1.33.4"  # Обновленная версия (пример)
               kubernetes_major_minor: "1.33"
             pi4-worker3:
               ansible_host: 192.168.99.103

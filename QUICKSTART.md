@@ -24,12 +24,17 @@ cp credentials.json.example credentials.json
 Отредактируйте `credentials.json`:
 ```json
 {
-  "users": {
-    "admin_user": "pi",
-    "admin_password": "ваш-пароль"
-  }
+  "ansible_user": "pi",
+  "ansible_password": "ваш-пароль",
+  "ansible_ssh_private_key_file": "~/.ssh/id_rsa",
+  "kubernetes_cluster_name": "raspberry-k8s",
+  "kubernetes_pod_subnet": "10.244.0.0/16",
+  "kubernetes_service_subnet": "10.96.0.0/12",
+  "kubernetes_api_server_advertise_address": "192.168.1.100"
 }
 ```
+
+ℹ️ **Можно использовать SSH ключи или пароль** - оставьте только нужные параметры.
 
 ### 3. Настройка инвентаря
 Отредактируйте `inventory.yml` с IP адресами ваших Pi:

@@ -4,7 +4,7 @@ kubernetes_role: "worker"
 
 # Kubelet настройки
 kubelet_max_pods: 110
-kubelet_pod_cidr: "{{ pod_subnet | default('10.244.0.0/16') }}"
+kubelet_pod_cidr: "{{ kubernetes_pod_subnet | default('10.244.0.0/16') }}"
 
 # Ресурсные лимиты для Pi 3
 resource_limits:

@@ -11,8 +11,9 @@
       tags: always
     - name: Set ansible_ssh_pass from credentials
       set_fact:
-        ansible_ssh_pass: "{{ users.admin_password }}"
+        ansible_ssh_pass: "{{ ansible_password }}"
       tags: always
+      when: ansible_password is defined
 
   roles:
     - role: common
