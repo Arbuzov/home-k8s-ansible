@@ -1,26 +1,51 @@
----
-- name: Add Kubernetes GPG key
-  apt_key:
-    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
-    state: present
+# Очистка старых ключей и keyring
+- name: Remove old Kubernetes keyring (if exists)
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    state: absent
+  ignore_errors: true
+
+- name: Remove old Kubernetes ASCII key (if exists)
+  ansible.builtin.file:
+    path: /etc/apt/keyrings/kubernetes-apt-keyring.asc
+    state: absent
+  ignore_errors: true
+
+- name: Remove deprecated apt-key from trusted.gpg (if exists)
+  ansible.builtin.command: >
+    apt-key del 234654DA9A296436
+  ignore_errors: true
+
+# BEGIN: Kubernetes install tasks
+- name: Ensure /etc/apt/keyrings exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Download and install Kubernetes GPG key
+  ansible.builtin.shell: >
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_major_minor }}/deb/Release.key" | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 
 - name: Add Kubernetes repository
-  apt_repository:
-    repo: "deb https://apt.kubernetes.io/ kubernetes-xenial main"
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_major_minor }}/deb/ /"
     state: present
-    update_cache: yes
+    update_cache: true
 
 - name: Install Kubernetes packages
-  apt:
+  ansible.builtin.apt:
     name:
-      - "kubelet={{ kubernetes_version }}.*"
-      - "kubeadm={{ kubernetes_version }}.*"
-      - "kubectl={{ kubernetes_version }}.*"
+      - "kubelet={{ kubernetes_version }}-1.1"
+      - "kubeadm={{ kubernetes_version }}-1.1"
+      - "kubectl={{ kubernetes_version }}-1.1"
     state: present
-    allow_downgrade: yes
+    allow_downgrade: true
 
 - name: Hold Kubernetes packages
-  dpkg_selections:
+  ansible.builtin.dpkg_selections:
     name: "{{ item }}"
     selection: hold
   loop:
@@ -29,25 +54,26 @@
     - kubectl
 
 - name: Configure kubelet
-  template:
+  ansible.builtin.template:
     src: kubelet-config.yml.j2
     dest: /etc/kubernetes/kubelet-config.yml
-    backup: yes
+    backup: true
   notify: restart kubelet
 
 - name: Create kubelet service directory
-  file:
+  ansible.builtin.file:
     path: /etc/systemd/system/kubelet.service.d
     state: directory
+    mode: '0755'
 
 - name: Configure kubelet service
-  copy:
+  ansible.builtin.copy:
     dest: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
     content: |
       # Note: This dropin only works with kubeadm and kubelet v1.11+
       [Service]
       Environment="KUBELET_KUBECONFIG_ARGS=--bootstrap-kubeconfig=/etc/kubernetes/bootstrap-kubelet.conf --kubeconfig=/etc/kubernetes/kubelet.conf"
-      Environment="KUBELET_CONFIG_ARGS=--config=/etc/kubernetes/kubelet-config.yml"
+      Environment="KUBELET_CONFIG_ARGS=--config=/var/lib/kubelet/config.yaml"
       # This is a file that "kubeadm init" and "kubeadm join" generates at runtime, populating the KUBELET_KUBEADM_ARGS variable dynamically
       EnvironmentFile=-/var/lib/kubelet/kubeadm-flags.env
       # This is a file that the user can use for overrides of the kubelet args as a last resort. Preferably, the user should use
@@ -58,16 +84,17 @@
   notify: restart kubelet
 
 - name: Start and enable kubelet
-  systemd:
+  ansible.builtin.systemd:
     name: kubelet
     state: started
-    enabled: yes
-    daemon_reload: yes
+    enabled: true
+    daemon_reload: true
 
 - name: Verify Kubernetes installation
-  command: kubeadm version
+  ansible.builtin.command: kubeadm version
   register: kubeadm_version
 
 - name: Display kubeadm version
-  debug:
+  ansible.builtin.debug:
     msg: "kubeadm version: {{ kubeadm_version.stdout }}"
+# END: Kubernetes install tasks

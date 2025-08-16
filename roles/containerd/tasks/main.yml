@@ -2,6 +2,7 @@
 
 
 
+
 - name: Install required packages
   ansible.builtin.apt:
     name:
@@ -13,13 +14,25 @@
     state: present
     update_cache: true
 
+- name: Add Docker GPG key
+  ansible.builtin.apt_key:
+    url: https://download.docker.com/linux/debian/gpg
+    state: present
+
+- name: Add Docker repository (for containerd)
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=arm64] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    state: present
+    update_cache: true
 
 
 
-- name: Install containerd
+
+
+- name: Install latest containerd.io
   ansible.builtin.apt:
     name: containerd.io
-    state: present
+    state: latest
 
 
 - name: Create containerd config directory
@@ -30,7 +43,7 @@
 
 
 - name: Generate default containerd config
-  ansible.builtin.command: containerd config default > /etc/containerd/config.toml
+  ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
   args:
     creates: /etc/containerd/config.toml
 
@@ -41,6 +54,11 @@
     regexp: '^\s*SystemdCgroup = false'
     replace: '            SystemdCgroup = true'
 
+- name: Remove CRI from disabled_plugins
+  ansible.builtin.replace:
+    path: /etc/containerd/config.toml
+    regexp: '^disabled_plugins = \["cri"\]'
+    replace: 'disabled_plugins = []'
 
 - name: Restart and enable containerd
   ansible.builtin.systemd:
