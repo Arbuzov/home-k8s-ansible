@@ -55,6 +55,29 @@
     sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
   when: swap_disabled | default(true)
 
+- name: Disable dphys-swapfile service (if present)
+  ansible.builtin.systemd:
+    name: dphys-swapfile
+    state: stopped
+    enabled: false
+  ignore_errors: true
+
+- name: Ensure dphys-swapfile size is 0 (prevent recreation)
+  ansible.builtin.lineinfile:
+    path: /etc/dphys-swapfile
+    regexp: '^CONF_SWAPSIZE='
+    line: 'CONF_SWAPSIZE=0'
+    create: yes
+    backup: yes
+  when: ansible_facts['os_family'] == 'Debian'
+  ignore_errors: true
+
+- name: Remove swap file if present
+  ansible.builtin.file:
+    path: /var/swap
+    state: absent
+  ignore_errors: true
+
 - name: Load br_netfilter module
   modprobe:
     name: br_netfilter
