@@ -15,7 +15,7 @@ inventory-ci.yml
 tests/.molecule/
 tests/__pycache__/
 .pytest_cache/
-
+.ansible
 # Temporary files
 *.tmp
 *.log
