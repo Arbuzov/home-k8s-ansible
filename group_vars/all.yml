@@ -9,10 +9,15 @@ system_packages:
   - curl
   - gnupg
   - lsb-release
-  - software-properties-common
   - htop
   - vim
   - git
+
+# Базовый URL APT-репозитория Kubernetes.
+# Официальный pkgs.k8s.io отдаётся через AWS CloudFront, который недоступен из этой
+# сети (скачивание пакетов виснет на ~700 Б/с). Используем зеркало TUNA.
+# Чтобы вернуться на официальный репозиторий: "https://pkgs.k8s.io"
+kubernetes_repo_base: "https://mirrors.tuna.tsinghua.edu.cn/kubernetes"
 
 kubernetes_cni: "flannel"
 

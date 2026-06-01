@@ -1,183 +1,137 @@
-# Troubleshooting Guide
+# Troubleshooting
 
-## Общие проблемы и решения
+Real issues hit while running this cluster on Raspberry Pis, and how to fix them.
 
-### 1. SSH подключение
-
-**Проблема**: Не удается подключиться к Raspberry Pi
-
-**Решение**:
-```bash
-# Проверить доступность хоста
-ping 192.168.1.100
-
-# Проверить SSH сервис
-ssh pi@192.168.1.100 'systemctl status ssh'
-
-# Проверить SSH ключи
-ssh-copy-id pi@192.168.1.100
-```
-
-### 2. Ошибки containerd
-
-**Проблема**: containerd не запускается
-
-**Решение**:
-```bash
-# Проверить статус containerd
-ansible all -m systemd -a "name=containerd" -b
-
-# Перезапустить containerd
-ansible all -m systemd -a "name=containerd state=restarted" -b
-
-# Проверить логи containerd
-ansible all -m shell -a "journalctl -u containerd --no-pager -l" -b
-```
-
-### 3. Проблемы с Kubernetes
-
-**Проблема**: Kubelet не запускается
-
-**Решение**:
-```bash
-# Проверить статус kubelet
-ansible all -m systemd -a "name=kubelet state=started enabled=yes" -b
-
-# Проверить логи kubelet
-ansible all -m shell -a "journalctl -u kubelet --no-pager -l" -b
-
-# Перезапустить kubelet
-ansible all -m systemd -a "name=kubelet state=restarted" -b
-```
-
-### 4. Проблемы с памятью на Raspberry Pi
-
-**Проблема**: Недостаточно памяти для подов
-
-**Решение**:
-- Увеличить swap (хотя это не рекомендуется для Kubernetes)
-- Уменьшить ресурсные лимиты для подов
-- Проверить настройки памяти в `/boot/config.txt`
-
-### 5. Сетевые проблемы
-
-**Проблема**: Поды не могут подключиться друг к другу
-
-**Решение**:
-```bash
-# Проверить Flannel
-kubectl get pods -n kube-flannel
-
-# Проверить сетевые политики
-kubectl get networkpolicies --all-namespaces
-
-# Перезапустить сетевые компоненты
-kubectl delete pods -n kube-flannel -l app=flannel
-```
-
-### 6. Проблемы с join worker нод
-
-**Проблема**: Worker ноды не могут присоединиться к кластеру
-
-**Решение**:
-```bash
-# Сгенерировать новый join token
-kubeadm token create --print-join-command
-
-# Проверить сертификаты
-openssl x509 -in /etc/kubernetes/pki/ca.crt -text -noout
-
-# Проверить время на всех нодах
-ansible all -m shell -a "date"
-```
-
-## Команды для диагностики
-
-### Проверить состояние кластера
+## Node is `NotReady`
 
 ```bash
-ansible-playbook playbooks/maintenance.yml --tags check
-ansible-playbook playbooks/test-cluster.yml
+ssh pi@<node>
+sudo systemctl status kubelet
+sudo journalctl -u kubelet -f
 ```
 
-### Проверить ресурсы
+Most common root causes on a Pi: swap re-enabled, missing cgroup kernel params,
+`ip_forward=0`, or the CNI not initialized (no `/etc/cni/net.d` config yet — wait for
+the Flannel pod, or check it can pull its image).
+
+## cgroups not enabled
 
 ```bash
-ansible-playbook playbooks/maintenance.yml --tags resources
+cat /proc/cmdline
+# must contain: cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
 ```
 
-### Перезапустить сервисы
+The `common` role appends these to `/boot/firmware/cmdline.txt` and reboots. The edit
+is idempotent — if you ever see the string duplicated many times, collapse it to one
+copy (a non-idempotent append is a classic reboot loop).
+
+## Swap keeps coming back
 
 ```bash
-ansible-playbook playbooks/maintenance.yml --tags restart
+swapon --show          # expect no output
+free -h                # Swap should be 0
 ```
 
-### Очистить систему
+- Classic swapfile: `sudo swapoff -a && sudo systemctl disable --now dphys-swapfile`.
+- **Raspberry Pi OS Trixie uses zram swap** via `systemd-zram-generator`. Disable it
+  or kubelet won't start (`failSwapOn`):
 
 ```bash
-ansible-playbook playbooks/maintenance.yml --tags cleanup
+sudo swapoff -a
+printf '# disabled for kubernetes\n' | sudo tee /etc/systemd/zram-generator.conf
+sudo systemctl mask systemd-zram-setup@zram0.service
 ```
 
-## Логи для анализа
+## `ip_forward` reset after reboot
 
-### Системные логи
-```bash
-# Журналы системы
-ansible all -m shell -a "journalctl --since '1 hour ago' --no-pager"
-
-# Логи containerd
-ansible all -m shell -a "journalctl -u containerd --since '1 hour ago' --no-pager"
-
-# Логи Kubelet
-ansible all -m shell -a "journalctl -u kubelet --since '1 hour ago' --no-pager"
-```
-
-### Kubernetes логи
-```bash
-# Логи системных подов
-kubectl logs -n kube-system -l component=kube-apiserver
-kubectl logs -n kube-system -l component=kube-controller-manager
-kubectl logs -n kube-system -l component=kube-scheduler
-
-# Логи Flannel
-kubectl logs -n kube-flannel -l app=flannel
-```
-
-## Мониторинг производительности
-
-### CPU и память
-```bash
-# Использование ресурсов нод
-kubectl top nodes
-
-# Использование ресурсов подов
-kubectl top pods --all-namespaces
-```
-
-### Дисковое пространство
-```bash
-# Проверить дисковое пространство
-ansible all -m shell -a "df -h"
-
-# Очистить контейнерные образы (через ctr)
-ansible all -m shell -a "ctr -n k8s.io image prune" -b
-```
-
-## Полезные команды kubectl
+kubeadm preflight fails with `/proc/sys/net/ipv4/ip_forward contents are not set to 1`.
+The role writes the sysctls to `/etc/sysctl.d/99-kubernetes.conf`; apply now with:
 
 ```bash
-# Проверить состояние нод
-kubectl get nodes -o wide
-
-# Проверить состояние подов
-kubectl get pods --all-namespaces
-
-# Описать проблемную ноду
-kubectl describe node <node-name>
-
-# Проверить события
-kubectl get events --sort-by=.metadata.creationTimestamp
-
-# Проверить ресурсы кластера
-kubectl get all --all-namespaces
+sudo sysctl --system
+cat /proc/sys/net/ipv4/ip_forward   # 1
 ```
+
+## containerd / CRI problems
+
+```bash
+sudo systemctl status containerd
+sudo crictl version
+sudo crictl info | grep -i cgroupDriver   # expect systemd
+```
+
+On **containerd 2.x** (Trixie) the config shipped by the Docker package is minimal; the
+role regenerates it (`containerd config default`), sets `SystemdCgroup = true` and a
+reachable `sandbox`/registry config.
+
+## Images won't pull / `kubeadm upgrade apply` hangs at "Pulling images"
+
+If `registry.k8s.io` blob downloads time out (AWS CloudFront unreachable on some
+networks), nothing pulls and upgrades stall.
+
+- **Packages**: point the apt repo at a mirror — set `kubernetes_repo_base` in
+  `group_vars/all.yml` (e.g. the TUNA mirror).
+- **Images**: set the cluster `imageRepository` to a reachable registry such as
+  `registry.aliyuncs.com/google_containers`:
+
+```bash
+# on the control plane
+kubectl -n kube-system get cm kubeadm-config \
+  -o jsonpath='{.data.ClusterConfiguration}' > /tmp/cc.yaml
+sed -i 's#imageRepository: registry.k8s.io#imageRepository: registry.aliyuncs.com/google_containers#' /tmp/cc.yaml
+sudo kubeadm init phase upload-config kubeadm --config /tmp/cc.yaml
+```
+
+- **Offline transfer between nodes** (when only the LAN is fast): export from a node
+  that already has the image and import on the target:
+
+```bash
+sudo ctr -n k8s.io images export /tmp/img.tar <image-ref>
+# copy /tmp/img.tar to the target node, then:
+sudo ctr -n k8s.io images import /tmp/img.tar
+```
+
+## `kubeadm upgrade node` fails: missing `cri-socket` annotation
+
+```
+node <name> doesn't have kubeadm.alpha.kubernetes.io/cri-socket annotation
+```
+
+Happens on nodes that were re-imaged/joined without the annotation. Add it and retry:
+
+```bash
+kubectl annotate node <name> \
+  kubeadm.alpha.kubernetes.io/cri-socket=unix:///var/run/containerd/containerd.sock --overwrite
+ssh pi@<node> 'sudo kubeadm upgrade node'
+kubectl uncordon <name>
+```
+
+## `DiskPressure` on the control plane
+
+```bash
+df -h /
+sudo du -xsh /etc/kubernetes/tmp/* | sort -rh | head
+```
+
+Every `kubeadm upgrade apply` leaves an ~900 MB etcd backup under
+`/etc/kubernetes/tmp/kubeadm-backup-etcd-*`. They pile up. Keep the most recent and
+remove the rest:
+
+```bash
+cd /etc/kubernetes/tmp
+ls -dt kubeadm-backup-etcd-* | tail -n +2 | sudo xargs rm -rf
+```
+
+Also remove orphaned `Failed`/`ContainerStatusUnknown` pods left after node drains:
+`kubectl delete pods -A --field-selector status.phase=Failed`.
+
+## Useful diagnostics
+
+```bash
+ansible all -m ping -e @credentials.json
+ansible masters -m shell -a "kubectl get nodes -o wide" -b -e @credentials.json
+ansible all -m shell -a "free -h && df -h /" -b -e @credentials.json
+ansible all -m shell -a "journalctl -u kubelet --no-pager -n 50" -b -e @credentials.json
+```
+
+See also [README.md](README.md) and [QUICKSTART.md](QUICKSTART.md).

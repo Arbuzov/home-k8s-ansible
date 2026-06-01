@@ -1,480 +1,249 @@
-# Kubernetes Cluster Management with Ansible
+# Home Kubernetes on Raspberry Pi — Ansible
 
-Ansible репозиторий для управления локальным Kubernetes кластером на Raspberry Pi с использованием **containerd** и **Kubernetes 1.33+**.
+Production-style, self-hosted Kubernetes cluster running on Raspberry Pi 4, fully
+provisioned, joined and upgraded with **Ansible** and **kubeadm**. `containerd`
+runtime, Flannel CNI, ARM64, per-node version pinning and zero-downtime rolling
+upgrades.
 
-## 🎯 Особенности
+[![CI](https://github.com/Arbuzov/home-k8s-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/Arbuzov/home-k8s-ansible/actions/workflows/ci.yml)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-1.35-blue?logo=kubernetes&logoColor=white)
+![containerd](https://img.shields.io/badge/runtime-containerd-575757?logo=containerd&logoColor=white)
+![Ansible](https://img.shields.io/badge/Ansible-2.9%2B-EE0000?logo=ansible&logoColor=white)
+![Arch](https://img.shields.io/badge/arch-arm64-FF6600)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-- **Kubernetes 1.33+** с официального репозитория pkgs.k8s.io
-- **containerd** как container runtime (заменил Docker)
-- **Flannel CNI** для сетевого взаимодействия
-- **Автоматическая настройка cgroups** для Raspberry Pi OS Bookworm
-- **Полное отключение swap** (требование Kubernetes)
-- **Автоматическое присоединение worker нод** с генерацией токенов
-- **ARM64 архитектура** (Raspberry Pi 4)
+---
 
-## 🏗️ Архитектура кластера
+## What this project demonstrates
 
-- **Master Node**: Raspberry Pi 4 (также выполняет роль worker)
-- **Worker Nodes**: 2x Raspberry Pi 3/4
+- **Idempotent Ansible roles** that take a bare Raspberry Pi OS install to a working
+  cluster member: `common` → `containerd` → `kubernetes` → `master` / `worker`.
+- **kubeadm cluster bootstrap** with automatic Flannel CNI install and **automated
+  worker join** (token generated on the control plane, no manual copy/paste).
+- **Per-node version pinning** in inventory, aware of the Kubernetes
+  [version-skew policy](https://kubernetes.io/releases/version-skew-policy/).
+- **Zero-downtime rolling minor upgrades** — `drain → kubeadm upgrade → uncordon`,
+  one minor at a time, control plane first. This repo's cluster was carried
+  `1.33 → 1.34 → 1.35` live (see [Engineering notes](#real-world-engineering-notes)).
+- **Heterogeneous fleet**: nodes on Debian 11/12/**13 (Trixie)** and
+  containerd **1.7 and 2.x** are managed by the same roles.
+- **Operated on a constrained network** where `registry.k8s.io` (AWS CloudFront)
+  is unreachable — solved with package/image mirrors instead of disabling checks.
 
-## 📋 Системные требования
+This started as my actual home lab and grew into a reusable template. The
+defaults reflect a real, running cluster (Kubernetes 1.35.5).
 
-- Raspberry Pi 4 (рекомендуется 4GB+ RAM для мастера)
-- Raspberry Pi OS 64-bit (Bookworm)
-- SSH доступ с паролем или ключами
-- Интернет соединение на всех нодах
+---
 
-# Запуск тестов
-make test
+## Architecture
 
-# Dry run на тестовом инвентаре
-make dry-run
-
-# Создание тестового кластера с kind
-make setup-test-cluster
-
-# Molecule тесты
-make molecule-test
+```
+                 ┌──────────────────────────┐
+                 │  kube-master (RPi 4)      │  control-plane + worker
+                 │  etcd · apiserver · CM ·  │
+                 │  scheduler · kubelet      │
+                 └────────────┬─────────────┘
+                              │  Flannel (VXLAN) 10.244.0.0/16
+        ┌─────────────────────┼─────────────────────┐
+        │                     │                     │
+ ┌──────┴──────┐       ┌──────┴──────┐       ┌──────┴──────┐
+ │ kube-worker-1│       │ kube-worker-2│       │ kube-worker-3│
+ │  RPi (kubelet│       │  RPi (kubelet│       │  RPi (kubelet│
+ │  + kube-proxy)│      │  + kube-proxy)│      │  + kube-proxy)│
+ └─────────────┘       └─────────────┘       └─────────────┘
 ```
 
-В контейнере доступны следующие команды (без использования Makefile):
+| Component        | Choice                                             |
+|------------------|----------------------------------------------------|
+| Orchestrator     | Kubernetes 1.35 (kubeadm), 1.27+ supported         |
+| Container runtime| containerd (1.7 / 2.x), SystemdCgroup              |
+| CNI              | Flannel (VXLAN)                                    |
+| OS               | Raspberry Pi OS 64-bit (Bullseye / Bookworm / Trixie) |
+| Architecture     | ARM64                                              |
+| Config mgmt      | Ansible                                            |
+
+---
+
+## Requirements
+
+- Raspberry Pi 4 (4 GB+ recommended for the control plane), Pi 3/4 for workers
+- Raspberry Pi OS 64-bit on every node
+- SSH access (password or key) with sudo
+- Ansible 2.9+ on the control machine and the collections in `requirements.yml`
+
+> The `common` role sets each node's hostname from the inventory
+> (`kube-master`, `kube-worker-1`, …), so the names below are what nodes end up with.
+
+---
+
+## Quick start
 
 ```bash
-# Проверка синтаксиса playbook
-ansible-playbook --syntax-check site.yml
+# 1. Install Ansible collections
+ansible-galaxy collection install -r requirements.yml
 
-# Проверка линтерами
-ansible-lint playbooks/ roles/
+# 2. Credentials (git-ignored)
+cp credentials.json.example credentials.json
+$EDITOR credentials.json
 
-# Запуск тестов (dry run)
-ansible-playbook site.yml --check --diff
+# 3. Inventory — set your node IPs and versions
+cp inventory.yml.example inventory.yml   # or edit inventory.yml directly
+$EDITOR inventory.yml
 
-# Molecule тесты (если требуется)
-cd tests && molecule test
+# 4. Check connectivity
+ansible all -m ping -e @credentials.json
 
-# Для тестирования кластера kind:
-# (если требуется, настройте kind и используйте playbooks/test-cluster.yml)
-ansible-playbook playbooks/test-cluster.yml
+# 5. Build the whole cluster
+ansible-playbook site.yml -e @credentials.json
 ```
 
-## Структура репозитория
+See **[QUICKSTART.md](QUICKSTART.md)** for the step-by-step version and
+**[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** when something on a Pi misbehaves.
+
+---
+
+## Repository layout
 
 ```text
 .
-├── ansible.cfg                 # Конфигурация Ansible
-├── credentials.json            # Плоские переменные для Ansible (игнорируется Git)
-├── credentials.json.example    # Пример файла с переменными
-├── inventory.yml               # Инвентарь серверов
-├── site.yml                    # Основной playbook
-├── requirements.yml            # Требования Ansible коллекций
-├── group_vars/                 # Переменные для групп
-│   ├── all.yml
-│   ├── masters.yml
-│   └── workers.yml
-├── host_vars/                  # Переменные для хостов
-├── roles/                      # Ansible роли
-│   ├── common/                 # Базовая настройка
-│   ├── containerd/             # Установка containerd
-│   ├── kubernetes/             # Установка Kubernetes
-│   ├── master/                 # Настройка master ноды
-│   └── worker/                 # Настройка worker нод
-└── playbooks/                  # Отдельные playbooks
-    ├── install-cluster.yml
-    ├── install-worker-with-join.yml  # Установка и присоединение worker ноды
-    ├── update-cluster.yml
-    ├── maintenance.yml
-    └── test-cluster.yml
+├── site.yml                  # Full cluster build (all roles, all hosts)
+├── inventory.yml(.example)   # Hosts + per-node Kubernetes version
+├── credentials.json.example  # SSH / cluster variables template (real one git-ignored)
+├── requirements.yml          # Ansible collection requirements
+├── ansible.cfg
+├── group_vars/               # all.yml, masters.yml, workers.yml
+├── host_vars/
+├── roles/
+│   ├── common/               # base OS prep: hostname, cgroups, swap off, sysctl, modules
+│   ├── containerd/           # containerd install + CRI/SystemdCgroup config
+│   ├── kubernetes/           # kubelet/kubeadm/kubectl install (pkgs.k8s.io / mirror)
+│   ├── master/               # kubeadm init, Flannel, join-token generation
+│   └── worker/               # kubeadm join, role labels
+├── playbooks/                # focused operations (see below)
+└── tests/                    # Molecule + kind-based tests
 ```
 
-## 🔧 Роли Ansible
+---
 
-### `common` - Базовая настройка системы
-- Обновление пакетов и настройка часового пояса
-- **Установка hostname** из inventory (kube-master, kube-worker-1, kube-worker-2)
-- **Настройка cgroups** (критично для Kubernetes на RPi)
-- **Полное отключение swap**
-- Загрузка модулей ядра и sysctl настройки
-- [Подробная документация](roles/common/README.md)
+## Ansible roles
 
-### `containerd` - Container Runtime
-- Установка containerd.io из Docker репозитория
-- **Настройка CRI API** (исправление disabled_plugins)
-- **Включение SystemdCgroup** для Kubernetes
-- [Подробная документация](roles/containerd/README.md)
+| Role          | Responsibility |
+|---------------|----------------|
+| **common**    | Packages, timezone, hostname from inventory, `/etc/hosts`, **cgroup enablement** in `cmdline.txt` (idempotent), **full swap off** (incl. zram), kernel modules (`br_netfilter`, `overlay`), Kubernetes sysctls, DNS. |
+| **containerd**| Installs containerd from the Docker repo (keyring + `signed-by`), enables the CRI plugin and `SystemdCgroup`. |
+| **kubernetes**| Installs `kubelet`/`kubeadm`/`kubectl` from the official `pkgs.k8s.io` repo (or a mirror, see below), pins and holds versions. |
+| **master**    | `kubeadm init`, installs Flannel, generates join tokens. |
+| **worker**    | `kubeadm join`, applies the `node-role.kubernetes.io/worker` label. |
 
-### `kubernetes` - Установка Kubernetes
-- Установка kubelet, kubeadm, kubectl версии 1.33+
-- **Официальный репозиторий pkgs.k8s.io**
-- Правильная настройка systemd для kubelet
-- [Подробная документация](roles/kubernetes/README.md)
+---
 
-### `master` - Мастер нода
-- Инициализация кластера с kubeadm
-- Установка Flannel CNI
-- **Автоматическая генерация join токенов**
-- [Подробная документация](roles/master/README.md)
+## Operations
 
-### `worker` - Worker ноды
-- Присоединение к кластеру с kubeadm join
-- **Автоматическое добавление меток ролей**
-- Проверка статуса присоединения
-- [Подробная документация](roles/worker/README.md)
-
-## 🚀 Плейбуки
-
-### Основной плейбук `site.yml`
-Полная установка кластера на все ноды:
 ```bash
-ansible-playbook site.yml
-```
-
-### Установка и присоединение worker ноды
-**Новый плейбук** для быстрого добавления worker нод:
-```bash
-ansible-playbook playbooks/install-worker-with-join.yml --limit новая-нода,мастер
-```
-
-Особенности:
-- ✅ Установка всех компонентов на worker ноду
-- ✅ Генерация токена на мастере (без обновлений мастера)
-- ✅ Отключение swap и настройка cgroups
-- ✅ Присоединение к кластеру без игнорирования preflight проверок
-- ✅ Автоматическое добавление метки `node-role.kubernetes.io/worker`
-
-## � Конфигурация переменных
-
-### Файл credentials.json
-Все переменные используют плоскую структуру для простого подключения:
-
-```json
-{
-  "ansible_user": "pi",                                    // SSH пользователь
-  "ansible_password": "YOUR_PASSWORD",                     // SSH пароль (опционально)
-  "ansible_ssh_private_key_file": "~/.ssh/id_rsa",        // SSH ключ (опционально)
-  "ansible_ssh_public_key_file": "~/.ssh/id_rsa.pub",     // Публичный SSH ключ
-  "kubernetes_cluster_name": "raspberry-k8s",             // Имя кластера
-  "kubernetes_pod_subnet": "10.244.0.0/16",               // Подсеть для подов
-  "kubernetes_service_subnet": "10.96.0.0/12",            // Подсеть для сервисов
-  "kubernetes_api_server_advertise_address": "192.168.1.100",  // IP мастера
-  "containerd_data_root": "/var/lib/containerd",           // Путь к данным containerd
-  "registry_mirror": "https://registry-1.docker.io"       // Mirror реестра
-}
-```
-
-### Использование переменных
-```bash
-# Подключение файла с переменными
+# Build / converge the whole cluster
 ansible-playbook site.yml -e @credentials.json
 
-# Переопределение отдельных переменных
-ansible-playbook site.yml -e @credentials.json -e kubernetes_cluster_name=my-cluster
-```
-
-## �🚀 Быстрый старт
-
-### Полная установка кластера
-
-1. **Установите требования Ansible:**
-   ```bash
-   ansible-galaxy collection install -r requirements.yml
-   ```
-
-2. **Создайте файл с кредами:**
-   ```bash
-   cp credentials.json.example credentials.json
-   # Отредактируйте credentials.json с вашими параметрами
-   ```
-
-   Пример конфигурации `credentials.json`:
-   ```json
-   {
-     "ansible_user": "pi",
-     "ansible_password": "YOUR_PASSWORD_HERE",
-     "ansible_ssh_private_key_file": "~/.ssh/id_rsa",
-     "kubernetes_cluster_name": "raspberry-k8s",
-     "kubernetes_pod_subnet": "10.244.0.0/16",
-     "kubernetes_service_subnet": "10.96.0.0/12",
-     "kubernetes_api_server_advertise_address": "192.168.1.100"
-   }
-   ```
-
-3. **Настройте инвентарь:**
-   ```bash
-   # Отредактируйте inventory.yml с IP адресами ваших Raspberry Pi
-   # Важно: версии Kubernetes задаются для каждой ноды индивидуально
-   ```
-
-   Пример конфигурации:
-   ```yaml
-   all:
-     children:
-       kubernetes_cluster:
-         children:
-           masters:
-             hosts:
-               kube-master:
-                 ansible_host: 192.168.1.100
-                 kubernetes_version: "1.33.1"
-                 kubernetes_major_minor: "1.33"
-           workers:
-             hosts:
-               kube-worker-1:
-                 ansible_host: 192.168.1.101
-                 kubernetes_version: "1.33.1"
-                 kubernetes_major_minor: "1.33"
-               kube-worker-2:
-                 ansible_host: 192.168.1.102
-                 kubernetes_version: "1.33.1"  # Можно указать разные версии
-                 kubernetes_major_minor: "1.33"
-   ```
-
-4. **Проверьте доступность хостов:**
-   ```bash
-   ansible all -m ping -e @credentials.json
-   ```
-
-5. **Установите кластер:**
-   ```bash
-   # Полная установка
-   ansible-playbook site.yml -e @credentials.json
-
-   # Или по тегам
-   ansible-playbook site.yml --tags install -e @credentials.json
-   ```
-
-### Быстрое добавление worker ноды
-
-Для добавления новой worker ноды к существующему кластеру:
-
-```bash
+# Add a new worker to an existing cluster (install + join in one shot)
 ansible-playbook playbooks/install-worker-with-join.yml \
-  --limit новая-worker-нода,мастер-нода \
-  -e @credentials.json
-```
+  --limit kube-worker-3,kube-master -e @credentials.json
 
-Этот плейбук автоматически:
-- Установит все необходимые компоненты
-- Сгенерирует join токен на мастере
-- Присоединит worker ноду к кластеру
-- Добавит метку worker роли
+# Rolling upgrade — control plane first, then workers one by one.
+# Bump kubernetes_version / kubernetes_major_minor in inventory.yml, then:
+ansible-playbook playbooks/update-master-version.yml -e @credentials.json
+ansible-playbook playbooks/update-worker-version.yml -e target_node=kube-worker-1 -e @credentials.json
+# ... repeat per worker. NEVER skip a minor version (kubeadm forbids it).
 
-### Проверка результата
+# Roll a single node back to a previous version
+ansible-playbook playbooks/rollback-node.yml -e target_host=kube-worker-1 -e rollback_version=1.34
 
-```bash
-# На мастер ноде проверьте статус кластера
-kubectl get nodes
-
-# Ожидаемый результат:
-# NAME            STATUS   ROLES                  AGE   VERSION
-# kube-master     Ready    control-plane,worker   5d    v1.33.1
-# kube-worker-1   Ready    worker                 5d    v1.33.1
-# kube-worker-2   Ready    worker                 1m    v1.33.1
-```
-
-## ⚠️ Важные замечания
-
-### Системные требования для Raspberry Pi
-- **Обязательно**: Raspberry Pi OS 64-bit (Bookworm)
-- **RAM**: Минимум 2GB для worker нод, 4GB+ для мастера
-- **Swap**: Автоматически отключается ролями (требование K8s)
-- **cgroups**: Автоматически настраиваются для правильной работы
-
-### Критические настройки
-
-#### Hostname настройка
-Роль `common` автоматически:
-- Устанавливает hostname системы из `inventory_hostname`
-- Обновляет `/etc/hosts` для корректного разрешения имен
-- Имена нод: `kube-master`, `kube-worker-1`, `kube-worker-2`
-
-#### cgroups memory
-Роли автоматически добавляют в `/boot/firmware/cmdline.txt`:
-```
-cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
-```
-⚠️ **Порядок параметров критически важен!**
-
-#### containerd CRI
-Роль `containerd` автоматически:
-- Включает CRI плагин (удаляет из disabled_plugins)
-- Настраивает SystemdCgroup = true
-- Обеспечивает совместимость с Kubernetes 1.27+
-
-#### preflight проверки
-Плейбуки **не игнорируют** preflight проверки - все проблемы исправляются:
-- ✅ Правильная настройка cgroups
-- ✅ Полное отключение swap
-- ✅ Работающий containerd CRI API
-- ✅ Корректная конфигурация kubelet
-
-### Версии и совместимость
-
-#### Настройка версий Kubernetes
-Версии Kubernetes задаются **индивидуально для каждой ноды** в `inventory.yml`:
-```yaml
-kube-master:
-  kubernetes_version: "1.33.1"        # Точная версия пакета
-  kubernetes_major_minor: "1.33"      # Мажорная.минорная для репозитория
-```
-
-#### Поддерживаемые версии
-- **Kubernetes**: 1.27+ (рекомендуется 1.33+)
-- **Container Runtime**: containerd (заменил Docker)
-- **CNI**: Flannel (по умолчанию)
-- **Архитектура**: ARM64
-
-#### Version Skew Policy
-Kubernetes поддерживает ограниченное различие версий между компонентами:
-- **Master → Worker**: Worker ноды могут быть на 1 минорную версию старше мастера
-- **Недопустимо**: Мастер старше worker нод
-- **Рекомендация**: Используйте одинаковые версии для стабильности
-
-#### Примеры конфигураций
-```yaml
-# Одинаковые версии (рекомендуется)
-kube-master:    kubernetes_version: "1.33.1"
-kube-worker-1:   kubernetes_version: "1.33.1"
-
-# Допустимое различие
-kube-master:    kubernetes_version: "1.33.1"  # Новая версия
-kube-worker-1:   kubernetes_version: "1.32.5"  # Старая версия (OK)
-
-# Недопустимо
-kube-master:    kubernetes_version: "1.32.1"  # Старая версия
-kube-worker-1:   kubernetes_version: "1.33.1"  # Новая версия (ERROR!)
-```
-
-### Безопасность
-- Join токены имеют ограниченное время жизни
-- Рекомендуется генерировать новые токены для каждого присоединения
-- SSH кроссовые ключи не сохраняются в репозитории
-
-## 🔄 Поштучное обновление нод
-
-### Обновление одной ноды
-
-```bash
-# Быстрое обновление worker ноды (использует версию из inventory.yml)
-ansible-playbook playbooks/update-worker-version.yml \
-  -l kube-worker-2 \
-  -e @credentials.json
-
-# Обновить конкретную ноду до указанной версии
-ansible-playbook playbooks/update-single-node.yml \
-  -e target_host=kube-master \
-  -e kubernetes_target_version=1.29
-
-# С дополнительными опциями
-ansible-playbook playbooks/update-single-node.yml \
-  -e target_host=kube-worker-1 \
-  -e kubernetes_target_version=1.29 \
-  -e drain_node=true \
-  -e update_system_packages=true
-```
-
-💡 **Совет**: Плейбук `update-worker-version.yml` автоматически использует версии из `inventory.yml`
-
-### Обновление нескольких нод с разными версиями
-
-1. Создайте файл конфигурации:
-
-```bash
-cp node-updates.yml.example node-updates.yml
-# Отредактируйте node-updates.yml под ваши нужды
-```
-
-2. Запустите обновление:
-
-```bash
-ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
-```
-
-### Откат к предыдущей версии
-
-```bash
-# Откатить ноду к предыдущей версии
-ansible-playbook playbooks/rollback-node.yml \
-  -e target_host=kube-worker-1 \
-  -e rollback_version=1.28
-```
-
-## Основные команды
-
-### Управление кластером
-
-```bash
-# Установка кластера
-ansible-playbook site.yml --tags install
-
-# Обновление всего кластера
-ansible-playbook playbooks/update-cluster.yml
-
-# Обновление одной ноды до конкретной версии
-ansible-playbook playbooks/update-single-node.yml -e target_host=kube-master -e kubernetes_target_version=1.29
-
-# Обновление нескольких нод с разными версиями
-ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
-
-# Откат ноды к предыдущей версии
-ansible-playbook playbooks/rollback-node.yml -e target_host=kube-worker-1 -e rollback_version=1.28
-
-# Проверка состояния кластера
+# Maintenance / health / cleanup
 ansible-playbook playbooks/maintenance.yml --tags check
-
-# Тестирование кластера
-ansible-playbook playbooks/test-cluster.yml
-
-# Проверка ресурсов системы
-ansible-playbook playbooks/maintenance.yml --tags resources
-
-# Очистка системы (APT)
 ansible-playbook playbooks/maintenance.yml --tags cleanup
 ```
 
-### Операции с нодами
+Kubernetes versions are pinned **per node** in `inventory.yml`:
 
-```bash
-# Обновление только worker нод
-ansible-playbook site.yml --limit workers --tags update
-
-# Обновление только master ноды
-ansible-playbook site.yml --limit masters --tags update
-
-# Перезапуск сервисов containerd и Kubelet
-ansible-playbook playbooks/maintenance.yml --tags restart
-
-# Проверка доступности всех хостов
-ansible all -m ping
-
-# Проверка статуса сервисов
-ansible all -m systemd -a "name=containerd" -b
-ansible all -m systemd -a "name=kubelet" -b
+```yaml
+kube-master:
+  kubernetes_version: "1.35.5"     # exact package version
+  kubernetes_major_minor: "1.35"   # used for the apt repo URL
 ```
 
-### Полезные команды для диагностики
+---
 
-```bash
-# Проверить версии Kubernetes
-ansible all -m shell -a "kubectl version --client --short" -b
+## Configuration
 
-# Проверить статус нод кластера
-ansible masters -m shell -a "kubectl get nodes -o wide" -b
+`credentials.json` (git-ignored — copy from the example):
 
-# Проверить системные ресурсы
-ansible all -m shell -a "free -h && df -h" -b
-
-# Посмотреть логи kubelet
-ansible all -m shell -a "journalctl -u kubelet --no-pager -l" -b
-
-# Посмотреть логи containerd
-ansible all -m shell -a "journalctl -u containerd --no-pager -l" -b
-## Используется containerd
-
-Вместо Docker для Kubernetes 1.27+ используется только containerd. Все задачи по установке и настройке контейнерного рантайма выполняет роль `containerd`.
+```json
+{
+  "ansible_user": "pi",
+  "ansible_password": "YOUR_PASSWORD",
+  "ansible_ssh_private_key_file": "~/.ssh/id_rsa",
+  "kubernetes_cluster_name": "raspberry-k8s",
+  "kubernetes_pod_subnet": "10.244.0.0/16",
+  "kubernetes_service_subnet": "10.96.0.0/12",
+  "kubernetes_api_server_advertise_address": "192.168.1.100"
+}
 ```
 
-## Требования
+Use either a password or an SSH key — keep only what you need. Sudo that needs a
+password is supplied with `-e ansible_become_pass=...` (or configure passwordless sudo).
 
-- Ansible 2.9+
-- SSH доступ к серверам с sudo правами
-- Raspberry Pi OS на всех узлах
+---
+
+## Real-world engineering notes
+
+A few problems this repo actually solved — kept here because they are the
+interesting part of running Kubernetes on bare Raspberry Pis on a home network.
+
+- **Blocked `registry.k8s.io` (AWS CloudFront).** On this network, CloudFront/S3
+  endpoints time out, so both the Kubernetes package CDN (`pkgs.k8s.io`) and image
+  blob downloads stall. Fixes, without weakening the cluster:
+  - **Packages** → the apt repo is pointed at the TUNA mirror via the
+    `kubernetes_repo_base` variable in `group_vars/all.yml` (set it back to
+    `https://pkgs.k8s.io` when the network allows).
+  - **Images** → the cluster's `imageRepository` is set to
+    `registry.aliyuncs.com/google_containers` (non-CloudFront, reachable). New
+    nodes / upgrades pull from there.
+- **Debian 13 (Trixie) + containerd 2.x.** `apt-key` is gone (keyring + `signed-by`
+  instead), `software-properties-common` no longer exists, the `cmdline.txt` cgroup
+  edit was made idempotent (it used to append every run and trigger reboots), sysctls
+  moved to `/etc/sysctl.d/99-kubernetes.conf`, and `systemd-zram-generator` swap is
+  disabled so kubelet starts.
+- **Rolling upgrade 1.33 → 1.34 → 1.35**, one minor at a time, etcd snapshot first,
+  control plane before workers, with `kubeadm upgrade apply` / `kubeadm upgrade node`.
+- **Disk hygiene.** Every `kubeadm upgrade apply` leaves an ~900 MB etcd backup under
+  `/etc/kubernetes/tmp/kubeadm-backup-etcd-*`; these accumulate and can trigger
+  `DiskPressure` on a small SD card — prune the old ones after upgrades.
+
+---
+
+## Testing
+
+```bash
+# Syntax + lint
+ansible-playbook --syntax-check site.yml
+ansible-lint playbooks/ roles/
+
+# Dry run against the inventory
+ansible-playbook site.yml --check --diff -e @credentials.json
+
+# Molecule (kind-based) tests
+cd tests && molecule test
+```
+
+CI runs lint and syntax checks on every push — see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+---
+
+## Contributing
+
+Issues and PRs welcome. Please keep roles idempotent, run `ansible-lint` before
+opening a PR, and never commit `credentials.json` or a real `inventory.yml` with
+secrets (both patterns are git-ignored by default).
+
+## License
+
+[MIT](LICENSE) © Arbuzov Sergey

@@ -45,3 +45,4 @@ venv/
 # Documentation
 docs/_build/
 site/
+etcd-backups/

@@ -1,12 +1,5 @@
-# Пример инвентаря с             kube-worker-2:
-              ansible_host: 192.168.99.102
-              node_role: worker
-              kubernetes_version: "1.33.1"  # Можно указать другую патч-версию
-              kubernetes_major_minor: "1.33"
-            kube-worker-3:
-              ansible_host: 192.168.99.103
-              node_role: worker
-              kubernetes_version: "1.32.5"  # Пример с предыдущей версиейерсиями Kubernetes на разных нодах
+# Example inventory — Kubernetes version is pinned per node.
+# Copy to inventory.yml and adjust IPs / versions for your fleet.
 
 all:
   children:
@@ -15,49 +8,36 @@ all:
         masters:
           hosts:
             kube-master:
-              ansible_host: 192.168.99.44
+              ansible_host: 192.168.1.100
               node_role: master
-              node_taints: []  # Мастер также является worker
-              kubernetes_version: "1.33.4"
-              kubernetes_major_minor: "1.33"
+              node_taints: []                 # master also runs workloads
+              kubernetes_version: "1.35.5"     # exact package version
+              kubernetes_major_minor: "1.35"   # used for the apt repo URL
         workers:
           hosts:
             kube-worker-1:
-              ansible_host: 192.168.99.101
+              ansible_host: 192.168.1.101
               node_role: worker
-              kubernetes_version: "1.33.4"  # Обновленная версия
-              kubernetes_major_minor: "1.33"
+              kubernetes_version: "1.35.5"
+              kubernetes_major_minor: "1.35"
             kube-worker-2:
-              ansible_host: 192.168.99.102
+              ansible_host: 192.168.1.102
               node_role: worker
-              kubernetes_version: "1.33.4"  # Обновленная версия (пример)
-              kubernetes_major_minor: "1.33"
-            pi4-worker3:
-              ansible_host: 192.168.99.103
+              kubernetes_version: "1.35.5"
+              kubernetes_major_minor: "1.35"
+            # A worker may trail the control plane by at most one minor
+            # version (Kubernetes version-skew policy):
+            kube-worker-3:
+              ansible_host: 192.168.1.103
               node_role: worker
-              kubernetes_version: "1.32.5"  # Пример с предыдущей версией
-              kubernetes_major_minor: "1.32"
+              kubernetes_version: "1.34.8"
+              kubernetes_major_minor: "1.34"
 
   vars:
-    # Общие переменные для всех хостов
     ansible_python_interpreter: /usr/bin/python3
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
-# Примеры использования:
-#
-# 1. Для постепенного обновления кластера:
-#    - Сначала обновляется мастер до новой версии
-#    - Затем поочередно обновляются worker ноды
-#
-# 2. Для тестирования совместимости:
-#    - Мастер на стабильной версии
-#    - Тестовые worker ноды на новых версиях
-#
-# 3. Для rolling update:
-#    - Разные worker ноды на разных версиях
-#    - Постепенное обновление без простоя
-#
-# Важно:
-# - Kubernetes поддерживает version skew до 1 минорной версии
-# - Worker ноды могут быть на 1 минорную версию старше мастера
-# - Но мастер не должен быть старше worker нод
+# Upgrade tips:
+#   * Upgrade the control plane first, then workers one at a time.
+#   * Never skip a minor version (1.33 -> 1.34 -> 1.35), kubeadm forbids it.
+#   * A mixed-version fleet is fine within the version-skew policy.

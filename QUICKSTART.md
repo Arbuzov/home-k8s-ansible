@@ -1,31 +1,32 @@
-# 🚀 Kubernetes на Raspberry Pi - Быстрый старт
+# Quick start — Kubernetes on Raspberry Pi
 
-## 📋 Что нужно
-- Raspberry Pi 4 (4GB+) для мастера
-- Raspberry Pi 3/4 для worker нод
-- Raspberry Pi OS 64-bit (Bookworm) на всех нодах
-- SSH доступ ко всем нодам
+## Prerequisites
 
-⚠️ **Важно**: Имена хостов будут автоматически изменены на `kube-master`, `kube-worker-1`, `kube-worker-2`
+- Raspberry Pi 4 (4 GB+) for the control plane, Pi 3/4 for workers
+- Raspberry Pi OS 64-bit on every node
+- SSH access to all nodes (password or key) with sudo
+- Ansible 2.9+ on your control machine
 
-## ⚡ Быстрая установка
+> The `common` role renames hosts to `kube-master`, `kube-worker-1`, `kube-worker-2`, …
+> based on the inventory, so don't be surprised when hostnames change.
 
-### 1. Подготовка
+## 1. Install Ansible collections
+
 ```bash
-# Клонируйте репозиторий
-git clone <repo-url>
-cd kubernetes-ansible
-
-# Создайте файл с кредами
-cp credentials.json.example credentials.json
+ansible-galaxy collection install -r requirements.yml
 ```
 
-### 2. Настройка кредов
-Отредактируйте `credentials.json`:
+## 2. Credentials
+
+```bash
+cp credentials.json.example credentials.json
+$EDITOR credentials.json
+```
+
 ```json
 {
   "ansible_user": "pi",
-  "ansible_password": "ваш-пароль",
+  "ansible_password": "your-password",
   "ansible_ssh_private_key_file": "~/.ssh/id_rsa",
   "kubernetes_cluster_name": "raspberry-k8s",
   "kubernetes_pod_subnet": "10.244.0.0/16",
@@ -34,197 +35,93 @@ cp credentials.json.example credentials.json
 }
 ```
 
-ℹ️ **Можно использовать SSH ключи или пароль** - оставьте только нужные параметры.
+Use either a password **or** an SSH key — keep only the fields you need.
+`credentials.json` is git-ignored.
 
-### 3. Настройка инвентаря
-Отредактируйте `inventory.yml` с IP адресами ваших Pi:
+## 3. Inventory
+
+Edit `inventory.yml` with your node IPs and the Kubernetes version per node:
+
 ```yaml
 all:
   children:
-    masters:
-      hosts:
-        kube-master:
-          ansible_host: 192.168.1.100
-          kubernetes_version: "1.33.1"     # Версия K8s для мастера
-          kubernetes_major_minor: "1.33"
-    workers:
-      hosts:
-        kube-worker-1:
-          ansible_host: 192.168.1.101
-          kubernetes_version: "1.33.1"     # Версия K8s для worker
-          kubernetes_major_minor: "1.33"
-        kube-worker-2:
-          ansible_host: 192.168.1.102
-          kubernetes_version: "1.33.1"     # Можно указать разные версии
-          kubernetes_major_minor: "1.33"
+    kubernetes_cluster:
+      children:
+        masters:
+          hosts:
+            kube-master:
+              ansible_host: 192.168.1.100
+              node_role: master
+              node_taints: []            # master also runs workloads
+              kubernetes_version: "1.35.5"
+              kubernetes_major_minor: "1.35"
+        workers:
+          hosts:
+            kube-worker-1:
+              ansible_host: 192.168.1.101
+              node_role: worker
+              kubernetes_version: "1.35.5"
+              kubernetes_major_minor: "1.35"
+            kube-worker-2:
+              ansible_host: 192.168.1.102
+              node_role: worker
+              kubernetes_version: "1.35.5"
+              kubernetes_major_minor: "1.35"
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 ```
 
-⚠️ **Важно**: Версии Kubernetes теперь задаются для каждой ноды индивидуально!
+Versions are set **per node**. Workers may trail the control plane by at most one
+minor version (Kubernetes version-skew policy).
 
-Пример смешанного кластера с разными версиями:
-```yaml
-    masters:
-      hosts:
-        kube-master:
-          ansible_host: 192.168.1.100
-          kubernetes_version: "1.33.1"     # Мастер на последней версии
-          kubernetes_major_minor: "1.33"
-    workers:
-      hosts:
-        kube-worker-1:
-          ansible_host: 192.168.1.101
-          kubernetes_version: "1.32.1"     # Worker на предыдущей версии
-          kubernetes_major_minor: "1.32"   # Поддерживается skew policy
-        kube-worker-2:
-          ansible_host: 192.168.1.102
-          kubernetes_version: "1.33.1"     # Worker на той же версии что мастер
-          kubernetes_major_minor: "1.33"
-```
+## 4. Install the cluster
 
-📋 **Политика версий**: Воркеры могут быть на 1 минорную версию ниже мастера (K8s version skew policy).
-
-### 4. Установка кластера
 ```bash
-# Проверьте доступность
+# Check connectivity first
 ansible all -m ping -e @credentials.json
 
-# Установите кластер
+# Build the cluster (add -e ansible_become_pass=... if sudo needs a password)
 ansible-playbook site.yml -e @credentials.json
 ```
 
-### 5. Проверка
+## 5. Verify
+
 ```bash
-# Подключитесь к мастеру и проверьте кластер
 ssh pi@192.168.1.100
-kubectl get nodes
-
-# Ожидаемый результат:
-# NAME            STATUS   ROLES                  AGE   VERSION
-# kube-master      Ready    control-plane,worker   5m    v1.33.1
-# kube-worker-1     Ready    worker                 3m    v1.33.1
-# kube-worker-2     Ready    worker                 2m    v1.33.1
-```
-
-## 🔧 Добавление новой worker ноды
-
-```bash
-# Установите и присоедините новую ноду
-ansible-playbook playbooks/install-worker-with-join.yml \
-  --limit новая-нода,kube-master \
-  -e @credentials.json
-```
-
-## 🆘 Решение проблем
-
-### Nода в статусе NotReady
-```bash
-# Проверьте kubelet
-ssh pi@проблемная-нода
-sudo systemctl status kubelet
-sudo journalctl -u kubelet -f
-```
-
-### Проблемы с cgroups
-Проверьте параметры ядра:
-```bash
-cat /proc/cmdline
-# Должно содержать: cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
-```
-
-### Swap не отключен
-```bash
-# Проверьте swap
-free -h
-# Swap должен быть 0B
-
-# Если swap включен
-sudo swapoff -a
-sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
-```
-
-### containerd проблемы
-```bash
-# Проверьте containerd
-sudo systemctl status containerd
-
-# Проверьте CRI API
-sudo crictl version
-```
-
-## 📚 Дополнительно
-- [Полная документация](README.md)
-- [Документация ролей](roles/)
-- [Плейбуки](playbooks/)
-
-## ⚠️ Важно
-- **Используйте только Raspberry Pi OS 64-bit (Bookworm)**
-- **Не игнорируйте preflight ошибки** - исправляйте их
-- **Swap должен быть полностью отключен**
-- **cgroups параметры критически важны для RPi**
-
-5. **Разверните кластер**:
-
-   ```bash
-   ansible-playbook site.yml --tags install
-   ```
-
-6. **Протестируйте кластер**:
-
-   ```bash
-   ansible-playbook playbooks/test-cluster.yml
-   ```
-
-## После установки
-
-- Скопируйте kubeconfig с master ноды для управления кластером
-- Установите дополнительные компоненты (ingress, storage, мониторинг)
-- Настройте backup и мониторинг
-
-## Обслуживание
-
-```bash
-# Обновление кластера
-ansible-playbook playbooks/update-cluster.yml
-
-# Проверка состояния
-ansible-playbook playbooks/maintenance.yml --tags check
-
-# Очистка системы
-ansible-playbook playbooks/maintenance.yml --tags cleanup
-```
-
-Готово! Ваш Kubernetes кластер на Raspberry Pi готов к использованию.
-
-## Управление версиями
-
-### Обновление отдельных нод
-Для обновления конкретной ноды измените версию в inventory и запустите:
-```bash
-# Обновить только одну ноду
-ansible-playbook playbooks/update-single-node.yml -l kube-worker-1
-
-# Обновить несколько нод
-ansible-playbook playbooks/update-multiple-nodes.yml -l workers
-```
-
-### Миграция на новую версию
-1. Измените `kubernetes_version` и `kubernetes_major_minor` в inventory.yml
-2. Сначала обновите worker ноды:
-   ```bash
-   ansible-playbook playbooks/update-cluster.yml --limit workers
-   ```
-3. Затем обновите master:
-   ```bash
-   ansible-playbook playbooks/update-cluster.yml --limit masters
-   ```
-
-### Проверка совместимости версий
-```bash
-# Проверка текущих версий всех нод
 kubectl get nodes -o wide
-
-# Проверка компонентов кластера
-kubectl version
+# NAME            STATUS   ROLES                  AGE   VERSION
+# kube-master     Ready    control-plane,worker   5m    v1.35.5
+# kube-worker-1   Ready    worker                 3m    v1.35.5
+# kube-worker-2   Ready    worker                 2m    v1.35.5
 ```
 
-💡 **Совет**: Всегда тестируйте обновления сначала на одном worker узле!
+## Add a worker later
+
+```bash
+ansible-playbook playbooks/install-worker-with-join.yml \
+  --limit new-node,kube-master -e @credentials.json
+```
+
+## Upgrade
+
+Bump `kubernetes_version` / `kubernetes_major_minor` in `inventory.yml`, then upgrade
+**the control plane first, workers afterwards, one minor version at a time**:
+
+```bash
+ansible-playbook playbooks/update-master-version.yml -e @credentials.json
+ansible-playbook playbooks/update-worker-version.yml -e target_node=kube-worker-1 -e @credentials.json
+# repeat per worker
+```
+
+Always test an upgrade on a single worker first. Take an etcd snapshot before
+touching the control plane.
+
+## Notes
+
+- Use Raspberry Pi OS **64-bit** only.
+- Don't ignore kubeadm preflight errors — fix the underlying issue.
+- Swap must be fully off (the `common` role handles `dphys-swapfile` and zram).
+- The `cgroup_enable=...` kernel parameters are mandatory on Raspberry Pi.
+
+More: [README.md](README.md) · [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
