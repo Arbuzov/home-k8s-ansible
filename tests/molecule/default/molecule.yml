@@ -47,7 +47,6 @@ provisioner:
   config_options:
     defaults:
       host_key_checking: false
-      stdout_callback: yaml
   inventory:
     group_vars:
       all:
