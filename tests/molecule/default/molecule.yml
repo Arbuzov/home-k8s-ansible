@@ -47,6 +47,7 @@ provisioner:
   config_options:
     defaults:
       host_key_checking: false
+      remote_tmp: /tmp/.ansible-tmp   # ~ isn't writable in the systemd container
   inventory:
     group_vars:
       all:
