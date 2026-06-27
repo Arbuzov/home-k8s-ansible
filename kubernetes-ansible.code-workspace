@@ -25,7 +25,6 @@
     "files.associations": {
       "*.yml": "ansible",
       "*.yaml": "ansible",
-      "inventory.yml": "ansible-inventory",
       "inventory-*.yml": "ansible-inventory"
     },
     "yaml.format.enable": true,

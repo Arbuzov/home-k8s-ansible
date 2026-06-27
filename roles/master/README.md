@@ -1,27 +1,31 @@
 # Master Role
 
-## Описание
-Роль `master` инициализирует мастер-ноду Kubernetes кластера и настраивает её для работы.
+## Description
 
-## Задачи
-- Проверка инициализации кластера
-- Инициализация Kubernetes кластера с помощью kubeadm
-- Настройка kubeconfig для root и пользователя pi
-- Удаление taint с мастер-ноды (опционально)
-- Установка Flannel CNI
-- **Генерация и сохранение join токена**
-- Ожидание готовности кластера
+The `master` role initializes the Kubernetes cluster master node and configures it for operation.
 
-## Переменные
-- `kubernetes.pod_subnet`: подсеть для подов (по умолчанию: "10.244.0.0/16")
-- `kubernetes.service_subnet`: подсеть для сервисов (по умолчанию: "10.96.0.0/12")
-- `kubernetes.api_server_advertise_address`: IP адрес API сервера
-- `master_schedulable`: разрешить запуск подов на мастере (по умолчанию: true)
-- `kubernetes_cni`: CNI плагин (по умолчанию: "flannel")
+## Tasks
 
-## Критически важные функции
+- Check cluster initialization state
+- Initialize the Kubernetes cluster using kubeadm
+- Configure kubeconfig for root and the pi user
+- Remove the taint from the master node (optional)
+- Install Flannel CNI
+- **Generate and save the join token**
+- Wait for the cluster to become ready
 
-### Инициализация кластера
+## Variables
+
+- `kubernetes.pod_subnet`: subnet for pods (default: "10.244.0.0/16")
+- `kubernetes.service_subnet`: subnet for services (default: "10.96.0.0/12")
+- `kubernetes.api_server_advertise_address`: IP address of the API server
+- `master_schedulable`: allow pods to be scheduled on the master (default: true)
+- `kubernetes_cni`: CNI plugin (default: "flannel")
+
+## Critical Functions
+
+### Cluster Initialization
+
 ```bash
 kubeadm init \
   --pod-network-cidr=10.244.0.0/16 \
@@ -30,48 +34,57 @@ kubeadm init \
   --node-name=<hostname>
 ```
 
-### Генерация join токена
-Автоматически генерирует токен для присоединения worker нод:
+### Join Token Generation
+
+Automatically generates a token for joining worker nodes:
+
 ```bash
 kubeadm token create --print-join-command
 ```
 
-Токен сохраняется:
-- На мастере: `/tmp/kubeadm-join-command`
-- Локально: `./kubeadm-join-command`
+The token is saved:
 
-### CNI установка
-Устанавливает Flannel CNI для сетевого взаимодействия между подами.
+- On the master: `/tmp/kubeadm-join-command`
+- Locally: `./kubeadm-join-command`
 
-## Теги задач
-- `master-init`: только инициализация кластера
-- `master-join`: только генерация join токена
+### CNI Installation
 
-## Создаваемые файлы
-- `/etc/kubernetes/admin.conf`: конфигурация администратора
-- `/root/.kube/config`: kubeconfig для root
-- `/home/pi/.kube/config`: kubeconfig для пользователя pi
-- `/tmp/kubeadm-join-command`: команда для присоединения worker нод
+Installs the Flannel CNI for pod-to-pod network communication.
 
-## Проверка работы
+## Task Tags
+
+- `master-init`: cluster initialization only
+- `master-join`: join token generation only
+
+## Created Files
+
+- `/etc/kubernetes/admin.conf`: administrator configuration
+- `/root/.kube/config`: kubeconfig for root
+- `/home/pi/.kube/config`: kubeconfig for the pi user
+- `/tmp/kubeadm-join-command`: command for joining worker nodes
+
+## Verification
+
 ```bash
-# Статус кластера
+# Cluster status
 kubectl get nodes
 
-# Статус подов системы
+# System pod status
 kubectl get pods -n kube-system
 
-# Проверка CNI
+# CNI check
 kubectl get pods -n kube-flannel
 ```
 
-## Зависимости
-- Роль `common`
-- Роль `containerd`
-- Роль `kubernetes`
+## Dependencies
 
-## Примечания
-- Роль выполняется только один раз при инициализации кластера
-- После успешной инициализации файл `/etc/kubernetes/admin.conf` является признаком готового кластера
-- Join токен действителен ограниченное время
-- Для безопасности рекомендуется генерировать новые токены для каждого присоединения
+- Role `common`
+- Role `containerd`
+- Role `kubernetes`
+
+## Notes
+
+- The role runs only once during cluster initialization
+- After successful initialization, the presence of `/etc/kubernetes/admin.conf` indicates a ready cluster
+- Join tokens are valid for a limited time
+- For security, it is recommended to generate new tokens for each join operation

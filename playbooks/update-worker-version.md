@@ -1,67 +1,67 @@
 # Update Worker Version Playbook
 
-## Описание
-Плейбук `update-worker-version.yml` предназначен для быстрого обновления версии Kubernetes на worker нодах.
+## Description
+The `update-worker-version.yml` playbook is designed for quickly upgrading the Kubernetes version on worker nodes.
 
-## Особенности
-- ✅ **Автоматически использует версии из inventory.yml**
-- ✅ **Безопасное обновление** с drain/uncordon ноды
-- ✅ **Разблокировка held packages** перед обновлением
-- ✅ **Блокировка пакетов** после обновления
-- ✅ **Обновление kubelet конфигурации**
-- ✅ **Проверка статуса** после обновления
+## Features
+- ✅ **Automatically reads versions from inventory-home.yml**
+- ✅ **Safe upgrade** with node drain/uncordon
+- ✅ **Unhold packages** before upgrading
+- ✅ **Hold packages** after upgrading
+- ✅ **Update kubelet configuration**
+- ✅ **Status verification** after upgrading
 
-## Использование
+## Usage
 
-### Быстрое обновление
+### Quick upgrade
 ```bash
-# Обновить kube-worker-2 до версии из inventory.yml
+# Upgrade kube-worker-2 to the version defined in inventory-home.yml
 ansible-playbook playbooks/update-worker-version.yml \
   -l kube-worker-2 \
   -e @credentials.json
 ```
 
-### Обновление с параметрами
+### Upgrade with parameters
 ```bash
-# Обновить без drain/uncordon
+# Upgrade without drain/uncordon
 ansible-playbook playbooks/update-worker-version.yml \
   -l kube-worker-1 \
   -e @credentials.json \
   -e drain_node=false
 
-# Указать конкретную ноду
+# Target a specific node
 ansible-playbook playbooks/update-worker-version.yml \
   -e target_node=kube-worker-3 \
   -e @credentials.json
 ```
 
-## Процесс обновления
+## Upgrade Process
 
-1. **Подготовка**: Отображение информации о ноде
-2. **Drain**: Вывод ноды из эксплуатации (опционально)
-3. **Unhold**: Разблокировка Kubernetes пакетов
-4. **Update**: Обновление kubelet, kubeadm, kubectl
-5. **Hold**: Блокировка пакетов на новой версии
-6. **Configure**: Обновление конфигурации kubelet
-7. **Restart**: Перезапуск kubelet сервиса
-8. **Wait**: Ожидание готовности kubelet
-9. **Uncordon**: Возврат ноды в работу (опционально)
-10. **Verify**: Проверка итогового статуса
+1. **Prepare**: Display node information
+2. **Drain**: Cordon and drain the node (optional)
+3. **Unhold**: Unhold Kubernetes packages
+4. **Update**: Upgrade kubelet, kubeadm, kubectl
+5. **Hold**: Hold packages at the new version
+6. **Configure**: Update kubelet configuration
+7. **Restart**: Restart the kubelet service
+8. **Wait**: Wait for kubelet to become ready
+9. **Uncordon**: Return the node to service (optional)
+10. **Verify**: Check the final status
 
-## Переменные
+## Variables
 
-- `target_node`: Имя ноды для обновления (по умолчанию: kube-worker-2)
-- `drain_node`: Выводить ли ноду из работы (по умолчанию: true)
-- `kubernetes_version`: Берется из inventory.yml для каждой ноды
-- `kubernetes_major_minor`: Берется из inventory.yml для каждой ноды
+- `target_node`: Name of the node to upgrade (default: kube-worker-2)
+- `drain_node`: Whether to drain the node before upgrading (default: true)
+- `kubernetes_version`: Read from inventory-home.yml for each node
+- `kubernetes_major_minor`: Read from inventory-home.yml for each node
 
-## Требования
+## Requirements
 
-- Доступ к master ноде для drain/uncordon операций
-- SSH доступ к target ноде
-- Корректно настроенный inventory.yml с версиями K8s
+- Access to the master node for drain/uncordon operations
+- SSH access to the target node
+- A correctly configured inventory-home.yml with K8s versions
 
-## Пример успешного выполнения
+## Example of a Successful Run
 
 ```
 TASK [Display final node status] ****************************************************

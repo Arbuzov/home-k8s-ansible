@@ -1,75 +1,75 @@
 # Kubernetes Role
 
-## Описание
-Роль `kubernetes` устанавливает компоненты Kubernetes (kubelet, kubeadm, kubectl) и настраивает их для работы.
+## Description
+The `kubernetes` role installs Kubernetes components (kubelet, kubeadm, kubectl) and configures them for operation.
 
-## Задачи
-- Очистка старых ключей и репозиториев Kubernetes
-- Установка GPG ключа из официального репозитория Kubernetes
-- Добавление официального репозитория Kubernetes
-- Установка пакетов Kubernetes с закреплением версии
-- Настройка kubelet и его systemd службы
-- Проверка установки
+## Tasks
+- Clean up legacy Kubernetes keys and repositories
+- Install the GPG key from the official Kubernetes repository
+- Add the official Kubernetes repository
+- Install Kubernetes packages at a pinned version
+- Configure kubelet and its systemd service
+- Verify the installation
 
-## Переменные
-- `kubernetes_major_minor`: мажорная.минорная версия K8s (например: "1.33")
-- `kubernetes_version`: полная версия K8s (например: "1.33.1")
+## Variables
+- `kubernetes_major_minor`: major.minor K8s version (e.g. `"1.33"`)
+- `kubernetes_version`: full K8s version (e.g. `"1.33.1"`)
 
-## Критически важные особенности
+## Critical Details
 
-### Официальный репозиторий
-Использует новый официальный репозиторий:
+### Official Repository
+Uses the new official repository:
 ```
 https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_major_minor }}/deb/
 ```
 
-### GPG ключ
-Ключ скачивается и сохраняется в dearmor формате для apt >= 2.4:
+### GPG Key
+The key is downloaded and stored in dearmored format for apt >= 2.4:
 ```bash
 curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key |
   gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
 ```
 
-### Конфигурация kubelet
-Создаёт systemd override с правильными путями:
-- Конфигурация: `/var/lib/kubelet/config.yaml` (совместимо с kubeadm)
+### kubelet Configuration
+Creates a systemd drop-in override with the correct paths:
+- Config: `/var/lib/kubelet/config.yaml` (kubeadm-compatible)
 - Bootstrap kubeconfig: `/etc/kubernetes/bootstrap-kubelet.conf`
 - Runtime kubeconfig: `/etc/kubernetes/kubelet.conf`
 
-### Закрепление версий
-Все пакеты закрепляются на определённой версии:
+### Version Pinning
+All packages are pinned to a specific version:
 ```bash
 apt-mark hold kubelet kubeadm kubectl
 ```
 
-## Установленные пакеты
+## Installed Packages
 - `kubelet={{ kubernetes_version }}-1.1`
 - `kubeadm={{ kubernetes_version }}-1.1`
 - `kubectl={{ kubernetes_version }}-1.1`
 
-## Зависимости
-- Роль `common` (для cgroups и системных настроек)
-- Роль `containerd` (для container runtime)
+## Dependencies
+- Role `common` (for cgroups and system settings)
+- Role `containerd` (for the container runtime)
 
-## Проверка установки
+## Verifying the Installation
 ```bash
-# Версия kubeadm
+# kubeadm version
 kubeadm version
 
-# Статус kubelet
+# kubelet status
 systemctl status kubelet
 
-# Проверка подключения к containerd
+# Check connectivity to containerd
 kubeadm config images list
 ```
 
-## Совместимость
+## Compatibility
 - Kubernetes 1.27+
-- containerd как container runtime
-- systemd как cgroup driver
-- ARM64 архитектура
+- containerd as the container runtime
+- systemd as the cgroup driver
+- ARM64 architecture
 
-## Примечания
-- Роль создаёт базовую конфигурацию kubelet
-- kubelet будет в состоянии ошибки до присоединения к кластеру (это нормально)
-- После установки требуется выполнить `kubeadm init` или `kubeadm join`
+## Notes
+- The role creates a base kubelet configuration
+- kubelet will be in an error state until it joins a cluster (this is expected)
+- After installation, run `kubeadm init` or `kubeadm join`

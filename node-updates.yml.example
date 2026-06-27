@@ -1,26 +1,26 @@
-# Пример конфигурации для обновления нескольких нод
-# Сохраните этот файл как node-updates.yml и используйте:
-# ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
+# Example node-update plan. Copy to node-updates.yml and run:
+#   ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml
+# Versions must be full patch versions (e.g. "1.35.5").
 
 node_updates:
   kube-master:
-    version: "1.29"              # Версия Kubernetes для обновления
-    drain: false                 # Не drain master ноду (если она единственная)
-    system_update: true          # Обновить системные пакеты
-    apply_upgrade: true          # Применить kubeadm upgrade
+    version: "1.35.5"            # target Kubernetes version
+    drain: false                 # don't drain a single-node control plane
+    system_update: true          # also apt dist-upgrade the node
+    apply_upgrade: true          # run kubeadm upgrade apply
 
   kube-worker-1:
-    version: "1.29"
-    drain: true                  # Drain ноду перед обновлением
+    version: "1.35.5"
+    drain: true                  # drain the node before upgrading
     system_update: true
     apply_upgrade: true
 
   kube-worker-2:
-    version: "1.28"              # Можно обновлять до разных версий
+    version: "1.34.8"            # nodes may target different versions
     drain: true
-    system_update: false         # Не обновлять системные пакеты
+    system_update: false         # skip OS package upgrade on this node
     apply_upgrade: true
 
-# Дополнительные опции:
-wait_between_nodes: 60           # Пауза между обновлениями нод (секунды)
-confirm_update: true             # Запрашивать подтверждение перед началом
+# Extra options:
+wait_between_nodes: 60           # seconds to pause between nodes
+confirm_update: true             # prompt for confirmation before starting

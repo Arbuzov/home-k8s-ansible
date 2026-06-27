@@ -1,58 +1,58 @@
 # Containerd Role
 
-## Описание
-Роль `containerd` устанавливает и настраивает containerd как container runtime для Kubernetes.
+## Description
+The `containerd` role installs and configures containerd as the container runtime for Kubernetes.
 
-## Задачи
-- Установка необходимых пакетов для работы с containerd
-- Добавление Docker GPG ключа и репозитория
-- Установка последней версии containerd.io
-- Создание и настройка конфигурационного файла containerd
-- **Включение SystemdCgroup** для совместимости с Kubernetes
-- **Исправление CRI плагина** (удаление из disabled_plugins)
-- Перезапуск и включение службы containerd
+## Tasks
+- Install the required packages for working with containerd
+- Add the Docker GPG key and repository
+- Install the latest version of containerd.io
+- Create and configure the containerd configuration file
+- **Enable SystemdCgroup** for compatibility with Kubernetes
+- **Fix the CRI plugin** (remove it from disabled_plugins)
+- Restart and enable the containerd service
 
-## Переменные
-Роль не требует дополнительных переменных - использует значения по умолчанию.
+## Variables
+The role requires no additional variables — it uses default values.
 
-## Критически важные настройки
+## Critical Settings
 
 ### SystemdCgroup
 ```toml
 [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]
   SystemdCgroup = true
 ```
-Необходимо для правильной работы с cgroup v2 в Kubernetes.
+Required for correct operation with cgroup v2 in Kubernetes.
 
 ### CRI Plugin
 ```toml
-disabled_plugins = []  # вместо ["cri"]
+disabled_plugins = []  # instead of ["cri"]
 ```
-CRI плагин должен быть включен для взаимодействия с kubelet.
+The CRI plugin must be enabled for communication with kubelet.
 
-## Зависимости
-- Роль должна выполняться после роли `common`
-- Требует настроенные cgroups в системе
+## Dependencies
+- This role must run after the `common` role
+- Requires cgroups configured on the system
 
-## Совместимость
+## Compatibility
 - Kubernetes 1.27+
 - cgroup v2
-- ARM64 архитектура (Raspberry Pi)
+- ARM64 architecture (Raspberry Pi)
 
-## Проверка работы
-После выполнения роли можно проверить:
+## Verifying the Role
+After the role completes, you can verify the setup:
 ```bash
-# Статус службы
+# Service status
 systemctl status containerd
 
-# Версия containerd
+# containerd version
 containerd --version
 
-# Проверка CRI API
+# Check the CRI API
 crictl version
 ```
 
-## Примечания
-- Роль устанавливает containerd из Docker репозитория
-- Конфигурация генерируется автоматически с помощью `containerd config default`
-- Изменения применяются немедленно после перезапуска службы
+## Notes
+- The role installs containerd from the Docker repository
+- The configuration is generated automatically using `containerd config default`
+- Changes take effect immediately after the service is restarted

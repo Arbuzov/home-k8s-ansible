@@ -1,0 +1,8 @@
+# Example per-node overrides. Copy to host_vars/<node-name>.yml to apply.
+# Anything set here wins over group_vars for that single host.
+---
+# Pin this node's container image registry to a local mirror, for example:
+# kubernetes_image_repository: "registry.example.lan/google_containers"
+
+# Give a beefier control-plane node more pods than the default:
+# kubelet_max_pods: 150

@@ -1,0 +1,17 @@
+# Copy to inventory-vpn.yml (gitignored) and fill in real values.
+# Run: ansible-playbook -i inventory-vpn.yml playbooks/deploy-vpn.yml
+vpn:
+  hosts:
+    vpn-gateway:
+      ansible_host: 20.0.0.10               # Azure VM public IP
+      ansible_user: azureuser               # whatever admin user the VM was created with
+      ansible_ssh_private_key_file: ~/.ssh/your-key
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  vars:
+    vpn_domain: vpn.example.com
+    vpn_certbot_email: you@example.com
+    # Route53 DNS-01 — IAM key scoped to the zone (this file is gitignored):
+    vpn_route53_access_key: AKIAxxxxxxxxxxxxxxxx
+    vpn_route53_secret_key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    # Seed a FRESH box from a local DB backup (never overwrites a live DB):
+    # vpn_db_restore_src: ./x-ui.db.backup

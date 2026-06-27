@@ -1,0 +1,20 @@
+---
+- name: Prepare test environment
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install base packages for testing
+      ansible.builtin.apt:
+        name:
+          - curl
+          - wget
+          - python3
+          - sudo
+        state: present

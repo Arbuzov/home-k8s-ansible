@@ -1,79 +1,85 @@
 # Update Master Version Playbook
 
-## Описание
-Плейбук `update-master-version.yml` предназначен для безопасного обновления master ноды Kubernetes кластера.
+## Description
 
-## Особенности
-- ✅ **Поэтапное обновление**: kubeadm → control-plane → kubelet/kubectl
-- ✅ **Автоматическое планирование** с отображением изменений
-- ✅ **Обновление control-plane компонентов**: etcd, kube-apiserver, kube-controller-manager, kube-scheduler
-- ✅ **Проверка здоровья** API сервера и компонентов
-- ✅ **Разблокировка/блокировка** held packages
-- ✅ **Проверка статуса** после обновления
+The `update-master-version.yml` playbook safely upgrades the Kubernetes control-plane (master) node.
 
-## Использование
+## Features
 
-### Основное обновление
+- ✅ **Phased upgrade**: kubeadm → control-plane → kubelet/kubectl
+- ✅ **Automatic upgrade plan** with a diff of pending changes
+- ✅ **Control-plane component upgrade**: etcd, kube-apiserver, kube-controller-manager, kube-scheduler
+- ✅ **Health checks** for the API server and cluster components
+- ✅ **Hold/unhold** of apt-pinned packages
+- ✅ **Status verification** after the upgrade
+
+## Usage
+
+### Standard upgrade
+
 ```bash
-# Обновить master до версии из inventory.yml
+# Upgrade the master node to the version defined in inventory-home.yml
 ansible-playbook playbooks/update-master-version.yml \
   -e target_node=kube-master \
   -e @credentials.json
 ```
 
-### Проверка перед обновлением
+### Pre-upgrade dry run
+
 ```bash
-# Dry-run для проверки
+# Dry-run to preview changes before applying
 ansible-playbook playbooks/update-master-version.yml \
   -e target_node=kube-master \
   -e @credentials.json \
   --check --diff
 ```
 
-## Процесс обновления
+## Upgrade Process
 
-1. **Подготовка**: Проверка, что это master нода
-2. **Unhold**: Разблокировка Kubernetes пакетов
-3. **kubeadm Update**: Обновление kubeadm до новой версии
-4. **Upgrade Plan**: Отображение плана обновления
-5. **Control Plane**: Обновление компонентов control-plane:
+1. **Preflight**: Verify that the target host is the master node
+2. **Unhold**: Remove apt hold from Kubernetes packages
+3. **kubeadm update**: Upgrade kubeadm to the target version
+4. **Upgrade plan**: Display the upgrade plan
+5. **Control plane**: Upgrade control-plane components:
    - etcd
    - kube-apiserver
    - kube-controller-manager
    - kube-scheduler
-6. **kubelet/kubectl**: Обновление kubelet и kubectl
-7. **Hold**: Блокировка пакетов на новой версии
-8. **Restart**: Перезапуск kubelet
-9. **Health Check**: Проверка API сервера и компонентов
-10. **Verify**: Проверка итогового статуса
+6. **kubelet/kubectl**: Upgrade kubelet and kubectl
+7. **Hold**: Pin packages at the new version
+8. **Restart**: Restart the kubelet service
+9. **Health check**: Verify the API server and cluster components
+10. **Verify**: Confirm the final node status
 
-## Компоненты которые обновляются
+## Components Upgraded
 
 ### Control Plane:
-- **etcd**: Хранилище данных кластера
-- **kube-apiserver**: API сервер Kubernetes
-- **kube-controller-manager**: Контроллеры кластера
-- **kube-scheduler**: Планировщик подов
+
+- **etcd**: Cluster data store
+- **kube-apiserver**: Kubernetes API server
+- **kube-controller-manager**: Cluster controllers
+- **kube-scheduler**: Pod scheduler
 
 ### Node Components:
-- **kubelet**: Агент на ноде
-- **kubectl**: CLI клиент
-- **kubeadm**: Инструмент управления кластером
 
-## Переменные
+- **kubelet**: Node agent
+- **kubectl**: CLI client
+- **kubeadm**: Cluster management tool
 
-- `target_node`: Имя master ноды (по умолчанию: kube-master)
-- `kubernetes_version`: Берется из inventory.yml
-- `kubernetes_major_minor`: Берется из inventory.yml
-- `node_role`: Должен содержать 'master'
+## Variables
 
-## Требования
+- `target_node`: Name of the master node (default: `kube-master`)
+- `kubernetes_version`: Read from `inventory-home.yml`
+- `kubernetes_major_minor`: Read from `inventory-home.yml`
+- `node_role`: Must contain `master`
 
-- Доступ к master ноде с правами sudo
-- Корректно настроенный inventory.yml с версиями K8s
-- Стабильное сетевое соединение (обновление может занять несколько минут)
+## Requirements
 
-## Пример успешного выполнения
+- SSH access to the master node with sudo privileges
+- A correctly configured `inventory-home.yml` specifying the target K8s versions
+- Stable network connection (the upgrade may take several minutes)
+
+## Example Successful Run
 
 ```
 TASK [Display final master node status] *****************************************************
@@ -95,10 +101,10 @@ ok: [kube-master] => {
 }
 ```
 
-## Важные замечания
+## Important Notes
 
-⚠️ **Порядок обновления**: Всегда обновляйте master ноду ПОСЛЕДНЕЙ, после всех worker нод
+⚠️ **Upgrade order**: Always upgrade the **control plane (master) node FIRST**, before any worker nodes. Kubernetes version-skew policy requires the control plane to be at the target version before workers are upgraded — upgrading workers first is unsupported and may break the cluster. Upgrade workers one at a time, one minor version at a time.
 
-✅ **Безопасность**: Плейбук создает резервные копии всех манифестов в `/etc/kubernetes/tmp/`
+✅ **Safety**: The playbook backs up all manifests to `/etc/kubernetes/tmp/` before making changes.
 
-🔄 **Откат**: В случае проблем можно восстановить старые манифесты из backup директории
+🔄 **Rollback**: If problems occur, the previous manifests can be restored from that backup directory.

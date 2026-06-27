@@ -3,14 +3,15 @@
   hosts: kubernetes_cluster
   become: true
   gather_facts: true
-  serial: "{{ ansible_play_batch | length }}"
+  # No serial: a fresh build converges all nodes at once. For staged rolling
+  # changes on a live cluster, use the per-node update playbooks instead.
 
   pre_tasks:
     - name: Load credentials
-      include_vars: credentials.json
+      ansible.builtin.include_vars: credentials.json
       tags: always
     - name: Set ansible_ssh_pass from credentials
-      set_fact:
+      ansible.builtin.set_fact:
         ansible_ssh_pass: "{{ ansible_password }}"
       tags: always
       when: ansible_password is defined

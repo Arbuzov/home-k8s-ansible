@@ -1,8 +1,9 @@
-# Общие переменные для всех хостов
-# Версии Kubernetes задаются индивидуально для каждой ноды в inventory.yml
+---
+# Common variables for all hosts.
+# Per-node Kubernetes versions are pinned in inventory-home.yml.
 timezone: "Europe/Moscow"
 
-# Системные пакеты
+# System packages installed on every node
 system_packages:
   - apt-transport-https
   - ca-certificates
@@ -13,26 +14,42 @@ system_packages:
   - vim
   - git
 
-# Базовый URL APT-репозитория Kubernetes.
-# Официальный pkgs.k8s.io отдаётся через AWS CloudFront, который недоступен из этой
-# сети (скачивание пакетов виснет на ~700 Б/с). Используем зеркало TUNA.
-# Чтобы вернуться на официальный репозиторий: "https://pkgs.k8s.io"
-kubernetes_repo_base: "https://mirrors.tuna.tsinghua.edu.cn/kubernetes"
+# Base URL of the Kubernetes apt repository.
+# Default is the official pkgs.k8s.io. On networks where pkgs.k8s.io (served via
+# AWS CloudFront) is unreachable, override with a mirror, e.g. in your inventory:
+#   kubernetes_repo_base: "https://mirrors.tuna.tsinghua.edu.cn/kubernetes"
+kubernetes_repo_base: "https://pkgs.k8s.io"
+
+# Container image registry kubeadm pulls control-plane images from (apiserver,
+# etcd, coredns, pause, ...). Default is the official registry.k8s.io. On
+# networks where it is blocked, override with a reachable mirror, e.g.:
+#   kubernetes_image_repository: "registry.aliyuncs.com/google_containers"
+kubernetes_image_repository: "registry.k8s.io"
 
 kubernetes_cni: "flannel"
 
-# Docker настройки
+# Flannel CNI manifest. Defaults to the upstream "latest" stable release artifact.
+# For byte-reproducible disaster recovery, pin a specific release tag, e.g.:
+#   flannel_manifest_url: "https://raw.githubusercontent.com/flannel-io/flannel/v0.26.7/Documentation/kube-flannel.yml"
+flannel_manifest_url: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+
+# Optional: pin containerd.io to an exact apt version (e.g. "1.7.27-1"). Leave
+# empty to install whatever the Docker repo serves on first install; existing
+# nodes are not force-upgraded (see roles/containerd).
+containerd_version: ""
+
+# Users added to the docker group
 docker_users:
   - pi
 
-# Настройки памяти для ARM
+# GPU memory split for Raspberry Pi (MB)
 arm_memory_split: 16
 
-# Системные настройки
+# System tuning
 swap_disabled: true
 cgroup_enabled: true
 
-# Сетевые настройки
+# DNS servers
 dns_servers:
   - 8.8.8.8
   - 8.8.4.4

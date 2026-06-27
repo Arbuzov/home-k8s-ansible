@@ -2,7 +2,7 @@
 dependency:
   name: galaxy
   options:
-    requirements-file: ../requirements.yml
+    requirements-file: ../../../requirements.yml
 
 driver:
   name: docker
@@ -56,12 +56,16 @@ provisioner:
           - curl
           - wget
           - vim
-        kubernetes_version: "1.28"
+        kubernetes_version: "1.35.5"
         kubernetes_cni: "flannel"
         docker_users:
           - root
         swap_disabled: true
         cgroup_enabled: true
+        # Container-safe toggles: don't reboot the test container, and skip
+        # systemd-resolved (not present in the image).
+        allow_reboot: false
+        configure_dns: false
         dns_servers:
           - 8.8.8.8
           - 1.1.1.1

@@ -8,6 +8,8 @@
 - name: Initialize Kubernetes cluster
   command: >
     kubeadm init
+    --kubernetes-version=v{{ kubernetes_version }}
+    --image-repository={{ kubernetes_image_repository | default('registry.k8s.io') }}
     --pod-network-cidr={{ kubernetes_pod_subnet | default('10.244.0.0/16') }}
     --service-cidr={{ kubernetes_service_subnet | default('10.96.0.0/12') }}
     --apiserver-advertise-address={{ kubernetes_api_server_advertise_address | default(ansible_default_ipv4.address) }}
@@ -48,47 +50,44 @@
     group: pi
     mode: '0644'
 
-- name: Remove master taint to allow scheduling on master
-  kubernetes.core.k8s_json_patch:
-    api_version: v1
-    kind: Node
-    name: "{{ ansible_hostname }}"
-    patch:
-      - op: remove
-        path: /spec/taints
+# Idempotent: kubectl exits non-zero with "not found" when the taint is already
+# gone, so a re-converge is a clean no-op instead of a hard failure.
+- name: Allow scheduling on the control-plane node (remove taint)
+  ansible.builtin.command: >
+    kubectl taint nodes {{ ansible_hostname }}
+    node-role.kubernetes.io/control-plane-
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: taint_result
+  changed_when: "'untainted' in taint_result.stdout"
+  # Tolerate only the "taint already absent" case; surface real errors such as
+  # the Node object not existing yet.
+  failed_when:
+    - taint_result.rc != 0
+    - not ('not found' in taint_result.stderr and 'taint' in taint_result.stderr)
   when: master_schedulable | default(true)
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
 
-- name: Install Flannel CNI
-  kubernetes.core.k8s:
-    state: present
-    definition:
-      apiVersion: v1
-      kind: Namespace
-      metadata:
-        name: kube-flannel
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
+# kubectl apply (not kubernetes.core.k8s src:) because the manifest is a remote
+# URL — the k8s module's src expects a local file path.
 - name: Apply Flannel CNI manifest
-  kubernetes.core.k8s:
-    state: present
-    src: https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml
+  ansible.builtin.command: kubectl apply -f {{ flannel_manifest_url }}
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+  register: flannel_apply
+  changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
   when: kubernetes_cni == "flannel"
 
 - name: Generate join token
   command: kubeadm token create --print-join-command
   register: join_command
+  changed_when: true  # always mints a fresh token
   tags: [master-join]
 
 - name: Save join command to file
   copy:
     content: "{{ join_command.stdout }}"
     dest: /tmp/kubeadm-join-command
-    mode: '0644'
+    mode: '0600'
   tags: [master-join]
 
 - name: Fetch join command to local machine

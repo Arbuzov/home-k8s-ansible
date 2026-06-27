@@ -1,25 +1,27 @@
 ---
 - name: Update Kubernetes version on specific worker node
   hosts: "{{ target_node | default('kube-worker-2') }}"
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
 
   tasks:
     - name: Display current node info
-      debug:
+      ansible.builtin.debug:
         msg: |
           Updating node: {{ inventory_hostname }}
           Current K8s version: {{ kubernetes_version }}
           Target major.minor: {{ kubernetes_major_minor }}
 
     - name: Drain the node (prepare for maintenance)
-      shell: |
-        kubectl drain {{ inventory_hostname }} --ignore-daemonsets --delete-emptydir-data --force
+      ansible.builtin.command: >
+        kubectl drain {{ inventory_hostname }}
+        --ignore-daemonsets --delete-emptydir-data --force
       delegate_to: "{{ groups['masters'][0] }}"
+      changed_when: true
       when: drain_node | default(true)
 
     - name: Unhold Kubernetes packages before update
-      dpkg_selections:
+      ansible.builtin.dpkg_selections:
         name: "{{ item }}"
         selection: install
       loop:
@@ -28,18 +30,18 @@
         - kubectl
 
     - name: Update Kubernetes packages
-      apt:
+      ansible.builtin.apt:
         name:
-          - "kubelet={{ kubernetes_version }}-1.1"
-          - "kubeadm={{ kubernetes_version }}-1.1"
-          - "kubectl={{ kubernetes_version }}-1.1"
+          - "kubelet={{ kubernetes_version }}-*"
+          - "kubeadm={{ kubernetes_version }}-*"
+          - "kubectl={{ kubernetes_version }}-*"
         state: present
-        update_cache: yes
-        allow_change_held_packages: yes
+        update_cache: true
+        allow_change_held_packages: true
       notify: restart kubelet
 
     - name: Hold Kubernetes packages after update
-      dpkg_selections:
+      ansible.builtin.dpkg_selections:
         name: "{{ item }}"
         selection: hold
       loop:
@@ -48,46 +50,46 @@
         - kubectl
 
     - name: Update kubelet configuration
-      shell: |
-        kubeadm upgrade node
+      ansible.builtin.command: kubeadm upgrade node
       register: upgrade_result
+      changed_when: true
 
     - name: Display upgrade result
-      debug:
+      ansible.builtin.debug:
         msg: "{{ upgrade_result.stdout_lines }}"
 
     - name: Restart kubelet service
-      systemd:
+      ansible.builtin.systemd:
         name: kubelet
         state: restarted
-        daemon_reload: yes
+        daemon_reload: true
 
     - name: Wait for kubelet to be ready
-      wait_for:
+      ansible.builtin.wait_for:
         port: 10250
         host: "{{ ansible_default_ipv4.address }}"
         delay: 10
         timeout: 120
 
     - name: Uncordon the node (return to service)
-      shell: |
-        kubectl uncordon {{ inventory_hostname }}
+      ansible.builtin.command: kubectl uncordon {{ inventory_hostname }}
       delegate_to: "{{ groups['masters'][0] }}"
+      changed_when: true
       when: drain_node | default(true)
 
     - name: Verify node status
-      shell: |
-        kubectl get nodes {{ inventory_hostname }} -o wide
+      ansible.builtin.command: kubectl get nodes {{ inventory_hostname }} -o wide
       delegate_to: "{{ groups['masters'][0] }}"
       register: node_status
+      changed_when: false
 
     - name: Display final node status
-      debug:
+      ansible.builtin.debug:
         msg: "{{ node_status.stdout_lines }}"
 
   handlers:
     - name: restart kubelet
-      systemd:
+      ansible.builtin.systemd:
         name: kubelet
         state: restarted
-        daemon_reload: yes
+        daemon_reload: true

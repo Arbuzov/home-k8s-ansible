@@ -1,14 +1,4 @@
 ---
-- name: Install Kubernetes Cluster
-  hosts: kubernetes_cluster
-  become: yes
-  gather_facts: yes
-
-  pre_tasks:
-    - name: Load credentials
-      include_vars: credentials.json
-
-  tasks:
-    - name: Run full cluster installation
-      include: ../site.yml
-      tags: install
+# Convenience wrapper — equivalent to running `ansible-playbook site.yml`.
+# Usage: ansible-playbook playbooks/install-cluster.yml -e @credentials.json
+- import_playbook: ../site.yml

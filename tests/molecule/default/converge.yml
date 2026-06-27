@@ -1,0 +1,6 @@
+---
+- name: Converge — apply the common base role
+  hosts: all
+  become: true
+  roles:
+    - role: ../../../roles/common

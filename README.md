@@ -8,7 +8,7 @@ upgrades.
 [![CI](https://github.com/Arbuzov/home-k8s-ansible/actions/workflows/ci.yml/badge.svg)](https://github.com/Arbuzov/home-k8s-ansible/actions/workflows/ci.yml)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-1.35-blue?logo=kubernetes&logoColor=white)
 ![containerd](https://img.shields.io/badge/runtime-containerd-575757?logo=containerd&logoColor=white)
-![Ansible](https://img.shields.io/badge/Ansible-2.9%2B-EE0000?logo=ansible&logoColor=white)
+![Ansible](https://img.shields.io/badge/ansible--core-2.16%2B-EE0000?logo=ansible&logoColor=white)
 ![Arch](https://img.shields.io/badge/arch-arm64-FF6600)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
@@ -69,7 +69,8 @@ defaults reflect a real, running cluster (Kubernetes 1.35.5).
 - Raspberry Pi 4 (4 GB+ recommended for the control plane), Pi 3/4 for workers
 - Raspberry Pi OS 64-bit on every node
 - SSH access (password or key) with sudo
-- Ansible 2.9+ on the control machine and the collections in `requirements.yml`
+- `ansible-core` 2.16+ on the control machine and the collections in `requirements.yml`
+  (the playbooks use the `kubernetes.core`, `community.general` and `ansible.posix` collections)
 
 > The `common` role sets each node's hostname from the inventory
 > (`kube-master`, `kube-worker-1`, …), so the names below are what nodes end up with.
@@ -87,8 +88,8 @@ cp credentials.json.example credentials.json
 $EDITOR credentials.json
 
 # 3. Inventory — set your node IPs and versions
-cp inventory.yml.example inventory.yml   # or edit inventory.yml directly
-$EDITOR inventory.yml
+cp inventory-home.yml.example inventory-home.yml   # or edit inventory-home.yml directly
+$EDITOR inventory-home.yml
 
 # 4. Check connectivity
 ansible all -m ping -e @credentials.json
@@ -107,7 +108,7 @@ See **[QUICKSTART.md](QUICKSTART.md)** for the step-by-step version and
 ```text
 .
 ├── site.yml                  # Full cluster build (all roles, all hosts)
-├── inventory.yml(.example)   # Hosts + per-node Kubernetes version
+├── inventory-home.yml(.example)   # Hosts + per-node Kubernetes version
 ├── credentials.json.example  # SSH / cluster variables template (real one git-ignored)
 ├── requirements.yml          # Ansible collection requirements
 ├── ansible.cfg
@@ -120,7 +121,7 @@ See **[QUICKSTART.md](QUICKSTART.md)** for the step-by-step version and
 │   ├── master/               # kubeadm init, Flannel, join-token generation
 │   └── worker/               # kubeadm join, role labels
 ├── playbooks/                # focused operations (see below)
-└── tests/                    # Molecule + kind-based tests
+└── tests/                    # Molecule smoke test (common role, systemd container)
 ```
 
 ---
@@ -148,7 +149,7 @@ ansible-playbook playbooks/install-worker-with-join.yml \
   --limit kube-worker-3,kube-master -e @credentials.json
 
 # Rolling upgrade — control plane first, then workers one by one.
-# Bump kubernetes_version / kubernetes_major_minor in inventory.yml, then:
+# Bump kubernetes_version / kubernetes_major_minor in inventory-home.yml, then:
 ansible-playbook playbooks/update-master-version.yml -e @credentials.json
 ansible-playbook playbooks/update-worker-version.yml -e target_node=kube-worker-1 -e @credentials.json
 # ... repeat per worker. NEVER skip a minor version (kubeadm forbids it).
@@ -161,7 +162,7 @@ ansible-playbook playbooks/maintenance.yml --tags check
 ansible-playbook playbooks/maintenance.yml --tags cleanup
 ```
 
-Kubernetes versions are pinned **per node** in `inventory.yml`:
+Kubernetes versions are pinned **per node** in `inventory-home.yml`:
 
 ```yaml
 kube-master:
@@ -189,6 +190,10 @@ kube-master:
 
 Use either a password or an SSH key — keep only what you need. Sudo that needs a
 password is supplied with `-e ansible_become_pass=...` (or configure passwordless sudo).
+
+> Keep `credentials.json` out of version control (it already is). For anything
+> beyond a home lab, encrypt the password with `ansible-vault` or pull it from
+> the environment via `lookup('env', ...)` instead of storing it in plaintext.
 
 ---
 
@@ -219,29 +224,57 @@ interesting part of running Kubernetes on bare Raspberry Pis on a home network.
 
 ---
 
+## Disaster recovery scope
+
+These playbooks rebuild the **cluster substrate** from bare Raspberry Pi OS:
+OS prep, container runtime, kubeadm bootstrap, CNI, and node joins. They do
+**not** back up or restore cluster *state* (etcd: workloads, secrets, configmaps).
+Before a risky change, take an etcd snapshot from the control plane:
+
+```bash
+kubectl -n kube-system exec etcd-kube-master -- etcdctl \
+  --endpoints=https://127.0.0.1:2379 \
+  --cacert=/etc/kubernetes/pki/etcd/ca.crt \
+  --cert=/etc/kubernetes/pki/etcd/server.crt \
+  --key=/etc/kubernetes/pki/etcd/server.key \
+  snapshot save /var/lib/etcd/snapshot-$(date +%F).db
+```
+
+then copy the snapshot off the node. Restore with `etcdctl snapshot restore`
+followed by `kubeadm init --ignore-preflight-errors=...` against the restored
+data dir.
+
+---
+
 ## Testing
 
 ```bash
-# Syntax + lint
+# Lint + syntax (what CI enforces)
+yamllint .
+ansible-lint
 ansible-playbook --syntax-check site.yml
-ansible-lint playbooks/ roles/
 
-# Dry run against the inventory
+# Dry run against your inventory
 ansible-playbook site.yml --check --diff -e @credentials.json
 
-# Molecule (kind-based) tests
+# Molecule smoke test of the `common` role in a systemd container
 cd tests && molecule test
 ```
 
-CI runs lint and syntax checks on every push — see
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
+**yamllint + ansible-lint + syntax-check**, a **Molecule** convergence of the
+`common` role in a systemd container, and a **Trivy** filesystem scan. The
+Pi-specific tasks (cgroup/cmdline edits, reboots, systemd-resolved) are
+intentionally skipped in the container, so Molecule validates the `common`
+role's portable logic — it is **not** a full cluster bootstrap, which requires
+real ARM64 hardware.
 
 ---
 
 ## Contributing
 
 Issues and PRs welcome. Please keep roles idempotent, run `ansible-lint` before
-opening a PR, and never commit `credentials.json` or a real `inventory.yml` with
+opening a PR, and never commit `credentials.json` or a real `inventory-home.yml` with
 secrets (both patterns are git-ignored by default).
 
 ## License

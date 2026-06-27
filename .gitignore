@@ -7,8 +7,10 @@ kubeadm-join-command
 credentials.json
 credentials-test.json
 node-updates.yml
+inventory-home.yml
 inventory-test.yml
 inventory-ci.yml
+inventory-vpn.yml
 
 # DevContainer and testing
 .devcontainer/.env

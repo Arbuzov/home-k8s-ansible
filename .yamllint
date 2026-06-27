@@ -1,0 +1,23 @@
+---
+extends: default
+
+rules:
+  line-length: disable
+  new-lines: disable          # repo is authored on Windows (CRLF)
+  document-start: disable
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no']
+    check-keys: false         # allow GitHub Actions' `on:` key
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  braces:
+    max-spaces-inside: 1
+  brackets:
+    max-spaces-inside: 1
+  indentation:
+    indent-sequences: whatever
+
+ignore: |
+  etcd-backups/
+  .devcontainer/

@@ -5,7 +5,8 @@
 - Raspberry Pi 4 (4 GB+) for the control plane, Pi 3/4 for workers
 - Raspberry Pi OS 64-bit on every node
 - SSH access to all nodes (password or key) with sudo
-- Ansible 2.9+ on your control machine
+- `ansible-core` 2.16+ on your control machine (install the collections with
+  `ansible-galaxy collection install -r requirements.yml`)
 
 > The `common` role renames hosts to `kube-master`, `kube-worker-1`, `kube-worker-2`, …
 > based on the inventory, so don't be surprised when hostnames change.
@@ -40,7 +41,7 @@ Use either a password **or** an SSH key — keep only the fields you need.
 
 ## 3. Inventory
 
-Edit `inventory.yml` with your node IPs and the Kubernetes version per node:
+Edit `inventory-home.yml` with your node IPs and the Kubernetes version per node:
 
 ```yaml
 all:
@@ -105,7 +106,7 @@ ansible-playbook playbooks/install-worker-with-join.yml \
 
 ## Upgrade
 
-Bump `kubernetes_version` / `kubernetes_major_minor` in `inventory.yml`, then upgrade
+Bump `kubernetes_version` / `kubernetes_major_minor` in `inventory-home.yml`, then upgrade
 **the control plane first, workers afterwards, one minor version at a time**:
 
 ```bash

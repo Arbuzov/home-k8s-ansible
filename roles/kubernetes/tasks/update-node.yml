@@ -1,9 +1,11 @@
 ---
-# Общие задачи для обновления ноды
+# Shared tasks for upgrading a single node.
+# kubernetes_target_version must be a full patch version (e.g. "1.35.5").
 - name: Check current Kubernetes version
-  shell: kubectl version --client --short 2>/dev/null || echo "Not installed"
+  command: kubelet --version
   register: current_k8s_version
-  ignore_errors: true
+  changed_when: false
+  failed_when: false
 
 - name: Display current version
   debug:
@@ -27,7 +29,7 @@
   delegate_to: "{{ groups['masters'][0] }}"
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  when: 
+  when:
     - drain_node | default(true)
     - is_worker_node or (is_master_node and groups['masters'] | length > 1)
 
@@ -52,9 +54,9 @@
 - name: Update Kubernetes packages
   apt:
     name:
-      - "kubelet={{ kubernetes_target_version }}.*"
-      - "kubeadm={{ kubernetes_target_version }}.*"
-      - "kubectl={{ kubernetes_target_version }}.*"
+      - "kubelet={{ kubernetes_target_version }}-*"
+      - "kubeadm={{ kubernetes_target_version }}-*"
+      - "kubectl={{ kubernetes_target_version }}-*"
     state: present
     allow_downgrade: yes
     force: yes
@@ -77,12 +79,13 @@
 - name: Upgrade master components
   block:
     - name: Plan kubeadm upgrade
-      command: "kubeadm upgrade plan v{{ kubernetes_target_version }}.0"
+      command: "kubeadm upgrade plan v{{ kubernetes_target_version }}"
       register: upgrade_plan
+      changed_when: false
       when: check_upgrade_plan | default(true)
 
     - name: Apply kubeadm upgrade
-      command: "kubeadm upgrade apply v{{ kubernetes_target_version }}.0 -y"
+      command: "kubeadm upgrade apply v{{ kubernetes_target_version }} -y"
       register: upgrade_result
       when: apply_upgrade | default(true)
 
@@ -99,7 +102,7 @@
   delegate_to: "{{ groups['masters'][0] }}"
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
-  when: 
+  when:
     - drain_node | default(true)
     - is_worker_node or (is_master_node and groups['masters'] | length > 1)
 
@@ -118,9 +121,10 @@
     KUBECONFIG: /etc/kubernetes/admin.conf
 
 - name: Verify updated version
-  shell: kubectl version --client --short
+  command: kubelet --version
   register: updated_k8s_version
+  changed_when: false
 
 - name: Display update result
   debug:
-    msg: "✅ {{ inventory_hostname }}: {{ current_k8s_version.stdout }} → {{ updated_k8s_version.stdout }}"
+    msg: "{{ inventory_hostname }}: {{ current_k8s_version.stdout }} -> {{ updated_k8s_version.stdout }}"

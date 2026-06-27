@@ -1,8 +1,4 @@
 ---
-
-
-
-
 - name: Install required packages
   ansible.builtin.apt:
     name:
@@ -26,21 +22,27 @@
     dest: /etc/apt/keyrings/docker.asc
     mode: '0644'
 
+- name: Map host architecture to Docker apt arch
+  ansible.builtin.set_fact:
+    containerd_apt_arch: "{{ {'aarch64': 'arm64', 'x86_64': 'amd64', 'armv7l': 'armhf'}[ansible_architecture] | default('') }}"
+
+- name: Fail on unsupported architecture
+  ansible.builtin.fail:
+    msg: "Unsupported architecture '{{ ansible_architecture }}' for the Docker/containerd apt repo."
+  when: not containerd_apt_arch
+
 - name: Add Docker repository (for containerd)
   ansible.builtin.apt_repository:
-    repo: "deb [arch=arm64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    repo: "deb [arch={{ containerd_apt_arch }} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
     state: present
     update_cache: true
 
-
-
-
-
-- name: Install latest containerd.io
+# state: present (not latest) so an existing node is never force-upgraded on a
+# re-converge. Set containerd_version in group_vars to pin an exact apt version.
+- name: Install containerd runtime
   ansible.builtin.apt:
-    name: containerd.io
-    state: latest
-
+    name: "containerd.io{% if containerd_version | default('') %}={{ containerd_version }}{% endif %}"
+    state: present
 
 - name: Create containerd config directory
   ansible.builtin.file:
@@ -48,12 +50,10 @@
     state: directory
     mode: '0755'
 
-
 - name: Generate default containerd config
   ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
   args:
     creates: /etc/containerd/config.toml
-
 
 - name: Set SystemdCgroup = true in config.toml
   ansible.builtin.replace:

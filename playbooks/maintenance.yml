@@ -6,7 +6,7 @@
 
   pre_tasks:
     - name: Load credentials
-      include_vars: credentials.json
+      ansible.builtin.include_vars: ../credentials.json
 
   tasks:
     - name: Check cluster status
@@ -56,9 +56,11 @@
         msg: "Kubelet service is {{ kubelet_status.status.ActiveState }}"
       tags: [check, kubelet]
 
-    - name: Clean containerd images
-      ansible.builtin.command: ctr -n k8s.io image prune
-      when: ansible_local.maintenance.containerd_cleanup | default(true)
+    - name: Prune unused container images
+      ansible.builtin.command: crictl rmi --prune
+      register: image_prune
+      changed_when: "'Deleted' in image_prune.stdout"
+      when: maintenance_containerd_cleanup | default(true)
       tags: [cleanup, containerd]
 
     - name: Clean apt cache
@@ -74,5 +76,5 @@
       loop:
         - containerd
         - kubelet
-      when: ansible_local.maintenance.restart_services | default(false)
+      when: maintenance_restart_services | default(false)
       tags: [restart]

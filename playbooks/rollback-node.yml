@@ -7,7 +7,7 @@
 
   pre_tasks:
     - name: Load credentials
-      include_vars: credentials.json
+      ansible.builtin.include_vars: ../credentials.json
 
     - name: Validate target_host is specified
       fail:
@@ -19,18 +19,30 @@
         msg: "Please specify rollback_version: ansible-playbook playbooks/rollback-node.yml -e rollback_version=1.28"
       when: rollback_version is not defined
 
-    - name: Confirm rollback
-      pause:
-        prompt: |
-          ⚠️  WARNING: You are about to rollback {{ inventory_hostname }} to Kubernetes {{ rollback_version }}
-          This operation may cause downtime and data loss.
-          Are you sure? Press ENTER to continue or Ctrl+C to abort
+    # Non-interactive safety gate (works in CI / no TTY): require an explicit flag
+    # rather than a blocking prompt. Run with -e confirm_rollback=true to proceed.
+    - name: Require explicit confirmation for rollback
+      fail:
+        msg: >-
+          Refusing to roll back {{ inventory_hostname }} to {{ rollback_version }}
+          without confirmation. This may cause downtime/data loss.
+          Re-run with -e confirm_rollback=true to proceed.
+      when: not (confirm_rollback | default(false) | bool)
+
+    - name: Refuse control-plane rollback (kubeadm cannot downgrade the control plane)
+      ansible.builtin.fail:
+        msg: >-
+          Rolling back a control-plane node is not supported: `kubeadm upgrade apply`
+          only moves forward. Restore the control plane from an etcd snapshot instead
+          (see "Disaster recovery scope" in the README). This playbook is for workers.
+      when: inventory_hostname in groups['masters']
 
   tasks:
     - name: Check current version
-      shell: kubectl version --client --short
+      command: kubelet --version
       register: current_version
-      ignore_errors: true
+      changed_when: false
+      failed_when: false
 
     - name: Display rollback information
       debug:

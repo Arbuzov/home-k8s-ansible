@@ -1,0 +1,44 @@
+---
+# Asserts what the common role actually does on a container platform.
+# No ignore_errors: a regression must fail the run.
+- name: Verify common role outcomes
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: No active swap
+      ansible.builtin.command: swapon --noheadings
+      register: swap_show
+      changed_when: false
+
+    - name: Assert swap is disabled
+      ansible.builtin.assert:
+        that: swap_show.stdout | trim == ""
+        fail_msg: "Swap is still active"
+
+    - name: Read kernel modules-load config
+      ansible.builtin.slurp:
+        src: /etc/modules-load.d/k8s.conf
+      register: modules_conf
+
+    - name: Assert br_netfilter and overlay are configured to load
+      ansible.builtin.assert:
+        that:
+          - "'br_netfilter' in (modules_conf.content | b64decode)"
+          - "'overlay' in (modules_conf.content | b64decode)"
+        fail_msg: "Required kernel modules are not configured"
+
+    - name: Read Kubernetes sysctl file
+      ansible.builtin.slurp:
+        src: /etc/sysctl.d/99-kubernetes.conf
+      register: sysctl_conf
+
+    - name: Assert IPv4 forwarding sysctl is set
+      ansible.builtin.assert:
+        that: "'net.ipv4.ip_forward' in (sysctl_conf.content | b64decode)"
+        fail_msg: "Kubernetes sysctls were not written"
+
+    - name: Assert a system package from the role is installed (vim)
+      ansible.builtin.command: dpkg -s vim
+      changed_when: false

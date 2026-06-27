@@ -1,0 +1,12 @@
+---
+# Basic profile: catches real syntax/runtime problems without enforcing the
+# stricter stylistic rules of the production profile.
+profile: basic
+
+exclude_paths:
+  - etcd-backups/
+  - .devcontainer/
+  - tests/Dockerfile.test
+
+# yes/no truthy values are accepted (see .yamllint); collections are declared
+# in requirements.yml.

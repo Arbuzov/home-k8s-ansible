@@ -1,71 +1,71 @@
 # Worker Role
 
-## Описание
-Роль `worker` присоединяет worker-ноду к существующему Kubernetes кластеру.
+## Description
+The `worker` role joins a worker node to an existing Kubernetes cluster.
 
-## Задачи
-- Проверка статуса присоединения к кластеру
-- Копирование команды join с локальной машины
-- Присоединение к кластеру с помощью kubeadm join
-- Проверка успешного присоединения
-- **Автоматическое добавление метки worker роли**
+## Tasks
+- Check cluster join status
+- Copy the join command from the local machine
+- Join the cluster using `kubeadm join`
+- Verify that the join succeeded
+- **Automatically label the node with the worker role**
 
-## Переменные
-Роль не требует дополнительных переменных - использует команду join из файла.
+## Variables
+The role requires no additional variables — it uses the join command from a file.
 
-## Критически важные функции
+## Key Functions
 
-### Проверка статуса
-Проверяет существование `/etc/kubernetes/kubelet.conf` для определения статуса присоединения.
+### Status Check
+Checks for the existence of `/etc/kubernetes/kubelet.conf` to determine whether the node has already joined the cluster.
 
-### Команда join
-Использует команду из файла `./kubeadm-join-command`, которая содержит:
+### Join Command
+Uses the command from the file `./kubeadm-join-command`, which contains:
 ```bash
 kubeadm join <master-ip>:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
 ```
 
-### Автоматическая маркировка
-Добавляет метку роли worker:
+### Automatic Labeling
+Applies the worker role label to the node:
 ```bash
 kubectl label node <hostname> node-role.kubernetes.io/worker= --overwrite
 ```
 
-## Теги задач
-- `worker-label`: только добавление метки роли
+## Task Tags
+- `worker-label`: apply the role label only
 
-## Зависимости
-- Роль `common`
-- Роль `containerd`
-- Роль `kubernetes`
-- Инициализированный мастер кластер
-- Файл `./kubeadm-join-command` с валидным токеном
+## Dependencies
+- Role `common`
+- Role `containerd`
+- Role `kubernetes`
+- An initialized master cluster
+- The file `./kubeadm-join-command` containing a valid token
 
-## Проверка работы
+## Verifying Operation
 ```bash
-# Проверка на мастере
+# Check on the master
 kubectl get nodes
 
-# Проверка на worker ноде
+# Check on the worker node
 systemctl status kubelet
 journalctl -u kubelet
 ```
 
-## Процесс присоединения
-1. Проверка готовности системы (cgroups, swap, containerd)
-2. Выполнение preflight проверок kubeadm
-3. Создание конфигурации kubelet
-4. Запуск kubelet
-5. Присоединение к кластеру
-6. Добавление метки роли
+## Join Process
+1. Verify system readiness (cgroups, swap, containerd)
+2. Run kubeadm preflight checks
+3. Generate kubelet configuration
+4. Start kubelet
+5. Join the cluster
+6. Apply the role label
 
-## Возможные проблемы
-- **Истёкший токен**: требуется сгенерировать новый на мастере
-- **Проблемы с сетью**: проверить доступность мастера
-- **cgroups**: убедиться в правильной настройке cgroup memory
-- **swap**: должен быть полностью отключен
+## Known Issues
+- **Expired token**: generate a new one on the master
+- **Network issues**: verify that the master is reachable
+- **cgroups**: ensure cgroup memory is configured correctly
+- **swap**: must be completely disabled
 
-## Примечания
-- Роль должна выполняться после полной настройки мастера
-- Join токен имеет ограниченное время жизни
-- После присоединения нода автоматически получает метку worker роли
-- kubelet автоматически запускается и присоединяется к кластеру
+## Notes
+- The role must be executed after the master is fully configured
+- The join token has a limited lifetime
+- After joining, the node is automatically labeled with the worker role
+- kubelet starts automatically and registers with the cluster

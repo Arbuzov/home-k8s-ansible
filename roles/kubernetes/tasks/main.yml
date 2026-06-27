@@ -1,4 +1,4 @@
-# Очистка старых ключей и keyring
+# Clean up old keys / keyrings from previous repo setups
 - name: Remove old Kubernetes keyring (if exists)
   ansible.builtin.file:
     path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
@@ -38,9 +38,9 @@
 - name: Install Kubernetes packages
   ansible.builtin.apt:
     name:
-      - "kubelet={{ kubernetes_version }}-1.1"
-      - "kubeadm={{ kubernetes_version }}-1.1"
-      - "kubectl={{ kubernetes_version }}-1.1"
+      - "kubelet={{ kubernetes_version }}-*"
+      - "kubeadm={{ kubernetes_version }}-*"
+      - "kubectl={{ kubernetes_version }}-*"
     state: present
     allow_downgrade: true
 
@@ -93,6 +93,7 @@
 - name: Verify Kubernetes installation
   ansible.builtin.command: kubeadm version
   register: kubeadm_version
+  changed_when: false
 
 - name: Display kubeadm version
   ansible.builtin.debug:

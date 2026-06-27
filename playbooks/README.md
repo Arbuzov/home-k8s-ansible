@@ -1,138 +1,159 @@
 # Install Worker with Join Playbook
 
-## Описание
-Плейбук `install-worker-with-join.yml` автоматизирует полный процесс установки и присоединения worker ноды к существующему Kubernetes кластеру.
+## Overview
 
-## Особенности
-- ✅ **Полная установка** всех компонентов на worker ноду
-- ✅ **Генерация токена** на мастере без обновлений мастера
-- ✅ **Отключение swap** и настройка cgroups
-- ✅ **Присоединение к кластеру** без игнорирования preflight проверок
-- ✅ **Автоматическое добавление метки** `node-role.kubernetes.io/worker`
+The `install-worker-with-join.yml` playbook automates the complete process of installing and joining a worker node to an existing Kubernetes cluster.
 
-## Использование
+## Features
 
-### Базовое использование
+- **Full installation** of all components on the worker node
+- **Token generation** on the master without updating the master
+- **Swap disable** and cgroups configuration
+- **Cluster join** without ignoring preflight checks
+- **Automatic label** `node-role.kubernetes.io/worker` applied to the node
+
+## Usage
+
+### Basic usage
+
 ```bash
 ansible-playbook playbooks/install-worker-with-join.yml \
-  --limit новая-worker-нода,мастер-нода \
+  --limit kube-worker-3,kube-master \
   -e @credentials.json
 ```
 
-### С конкретными нодами
+### With specific nodes
+
 ```bash
 ansible-playbook playbooks/install-worker-with-join.yml \
   --limit kube-worker-2,kube-master \
   -e @credentials.json
 ```
 
-### Только отдельные этапы (теги)
+### Run only specific stages (tags)
+
 ```bash
-# Только установка компонентов
+# Component installation only
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags worker-setup \
   --limit kube-worker-2 \
   -e @credentials.json
 
-# Только генерация токена
+# Token generation only
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags join-token \
   --limit kube-master \
   -e @credentials.json
 
-# Только присоединение
+# Join only
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags worker-join \
   --limit kube-worker-2,kube-master \
   -e @credentials.json
 
-# Только добавление метки
+# Label only
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags label \
   --limit kube-worker-2,kube-master \
   -e @credentials.json
 ```
 
-## Этапы выполнения
+## Execution stages
 
-### 1. Установка компонентов (worker-setup)
-- Выполнение роли `common` (cgroups, swap, системные настройки)
-- Выполнение роли `containerd` (container runtime)
-- Выполнение роли `kubernetes` (kubelet, kubeadm, kubectl)
+### 1. Component installation (worker-setup)
 
-### 2. Генерация токена (join-token)
-- Проверка инициализации кластера на мастере
-- Генерация нового join токена
-- Сохранение токена на мастере и локально
+- Run the `common` role (cgroups, swap, system settings)
+- Run the `containerd` role (container runtime)
+- Run the `kubernetes` role (kubelet, kubeadm, kubectl)
 
-### 3. Присоединение к кластеру (worker-join)
-- Отключение swap
-- Чтение команды join из локального файла
-- Выполнение `kubeadm join` без игнорирования preflight
-- Проверка статуса kubelet
+### 2. Token generation (join-token)
 
-### 4. Добавление метки (label)
-- Добавление метки `node-role.kubernetes.io/worker=` на worker ноду
+- Verify cluster initialisation on the master
+- Generate a new join token
+- Save the token on the master and locally
 
-## Требования
+### 3. Cluster join (worker-join)
 
-### Для worker ноды
+- Disable swap
+- Read the join command from the local file
+- Execute `kubeadm join` without ignoring preflight checks
+- Verify kubelet status
+
+### 4. Label application (label)
+
+- Apply the label `node-role.kubernetes.io/worker=` to the worker node
+
+## Requirements
+
+### Worker node
+
 - Raspberry Pi OS 64-bit (Bookworm)
-- SSH доступ с указанными кредами
-- Интернет соединение
+- SSH access with the provided credentials
+- Internet connectivity
 
-### Для master ноды
-- Инициализированный кластер Kubernetes
-- Доступный файл `/etc/kubernetes/admin.conf`
-- Возможность выполнения `kubeadm token create`
+### Master node
 
-### Общие
-- Сетевая доступность между мастером и worker нодой
-- Корректные кроссовые кредитные данные в `credentials.json`
+- An initialised Kubernetes cluster
+- Accessible `/etc/kubernetes/admin.conf`
+- Ability to run `kubeadm token create`
 
-## Переменные
-Плейбук использует стандартные переменные из `group_vars/all.yml`:
-- `kubernetes_version`: версия Kubernetes для установки
-- `kubernetes_major_minor`: мажорная.минорная версия
+### General
 
-## Проверка результата
-После успешного выполнения:
+- Network reachability between the master and worker node
+- Correct credentials in `credentials.json`
+
+## Variables
+
+The playbook uses the standard variables from `group_vars/all.yml`:
+
+- `kubernetes_version`: Kubernetes version to install
+- `kubernetes_major_minor`: major.minor version
+
+## Verifying the result
+
+After a successful run:
 
 ```bash
-# На мастере
+# On the master
 kubectl get nodes
 
-# Ожидаемый результат:
+# Expected output:
 # NAME            STATUS   ROLES                  AGE   VERSION
 # kube-master      Ready    control-plane,worker   5d    v1.33.1
-# kube-worker-1     Ready    worker                 5d    v1.33.1
-# новая-нода      Ready    worker                 1m    v1.33.1
+# kube-worker-1    Ready    worker                 5d    v1.33.1
+# kube-worker-3    Ready    worker                 1m    v1.33.1
 ```
 
-## Решение проблем
+## Troubleshooting
 
-### Preflight ошибки
-Плейбук **не игнорирует** preflight проверки. Если есть ошибки:
-- Проверьте cgroups: `cat /proc/cmdline`
-- Проверьте swap: `free -h`
-- Проверьте containerd: `systemctl status containerd`
+### Preflight errors
 
-### Токен истёк
-Если токен истёк, заново запустите только генерацию:
+The playbook **does not ignore** preflight checks. If errors occur:
+
+- Check cgroups: `cat /proc/cmdline`
+- Check swap: `free -h`
+- Check containerd: `systemctl status containerd`
+
+### Token expired
+
+If the token has expired, re-run only the token generation stage:
+
 ```bash
 ansible-playbook playbooks/install-worker-with-join.yml \
   --tags join-token,worker-join \
-  --limit новая-нода,мастер \
+  --limit kube-worker-3,kube-master \
   -e @credentials.json
 ```
 
-### Нода не присоединяется
-1. Проверьте сетевую доступность между нодами
-2. Убедитесь, что мастер доступен на порту 6443
-3. Проверьте логи kubelet: `journalctl -u kubelet -f`
+### Node does not join
 
-## Примечания
-- Плейбук идемпотентен - можно запускать многократно
-- Join токены действительны ограниченное время (по умолчанию 24 часа)
-- После присоединения нода автоматически получает метку worker роли
-- Для безопасности используйте SSH ключи вместо паролей в продакшене
+1. Check network reachability between nodes
+2. Ensure the master is reachable on port 6443
+3. Check kubelet logs: `journalctl -u kubelet -f`
+
+## Notes
+
+- The playbook is idempotent — it can be run multiple times safely
+- Join tokens are valid for a limited time (24 hours by default)
+- After joining, the node automatically receives the worker role label
+- For security, use SSH keys instead of passwords in production

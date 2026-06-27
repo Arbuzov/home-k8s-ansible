@@ -1,24 +1,24 @@
 ---
 - name: Update Kubernetes version on master node
   hosts: "{{ target_node | default('kube-master') }}"
-  become: yes
-  gather_facts: yes
+  become: true
+  gather_facts: true
 
   tasks:
     - name: Display current master node info
-      debug:
+      ansible.builtin.debug:
         msg: |
           Updating master node: {{ inventory_hostname }}
           Current K8s version: {{ kubernetes_version }}
           Target major.minor: {{ kubernetes_major_minor }}
 
     - name: Check if this is a master node
-      fail:
+      ansible.builtin.fail:
         msg: "This playbook can only be run on master nodes"
       when: "'master' not in node_role"
 
     - name: Unhold Kubernetes packages before update
-      dpkg_selections:
+      ansible.builtin.dpkg_selections:
         name: "{{ item }}"
         selection: install
       loop:
@@ -27,47 +27,49 @@
         - kubectl
 
     - name: Update kubeadm package first
-      apt:
-        name: "kubeadm={{ kubernetes_version }}-1.1"
+      ansible.builtin.apt:
+        name: "kubeadm={{ kubernetes_version }}-*"
         state: present
-        update_cache: yes
-        allow_change_held_packages: yes
+        update_cache: true
+        allow_change_held_packages: true
 
     - name: Check kubeadm version
-      shell: kubeadm version -o short
+      ansible.builtin.command: kubeadm version -o short
       register: kubeadm_version_check
+      changed_when: false
 
     - name: Display kubeadm version
-      debug:
+      ansible.builtin.debug:
         msg: "kubeadm version: {{ kubeadm_version_check.stdout }}"
 
     - name: Plan the upgrade
-      shell: kubeadm upgrade plan
+      ansible.builtin.command: kubeadm upgrade plan
       register: upgrade_plan
+      changed_when: false
       failed_when: false
 
     - name: Display upgrade plan
-      debug:
+      ansible.builtin.debug:
         msg: "{{ upgrade_plan.stdout_lines }}"
 
     - name: Apply the upgrade
-      shell: "kubeadm upgrade apply v{{ kubernetes_version }} -y"
+      ansible.builtin.command: "kubeadm upgrade apply v{{ kubernetes_version }} -y"
       register: upgrade_result
 
     - name: Display upgrade result
-      debug:
+      ansible.builtin.debug:
         msg: "{{ upgrade_result.stdout_lines }}"
 
     - name: Update kubelet and kubectl packages
-      apt:
+      ansible.builtin.apt:
         name:
-          - "kubelet={{ kubernetes_version }}-1.1"
-          - "kubectl={{ kubernetes_version }}-1.1"
+          - "kubelet={{ kubernetes_version }}-*"
+          - "kubectl={{ kubernetes_version }}-*"
         state: present
-        allow_change_held_packages: yes
+        allow_change_held_packages: true
 
     - name: Hold Kubernetes packages after update
-      dpkg_selections:
+      ansible.builtin.dpkg_selections:
         name: "{{ item }}"
         selection: hold
       loop:
@@ -76,22 +78,22 @@
         - kubectl
 
     - name: Restart kubelet
-      systemd:
+      ansible.builtin.systemd:
         name: kubelet
         state: restarted
-        daemon_reload: yes
+        daemon_reload: true
 
     - name: Wait for kubelet to be ready
-      wait_for:
+      ansible.builtin.wait_for:
         port: 10250
         host: "{{ ansible_default_ipv4.address }}"
         delay: 10
         timeout: 120
 
     - name: Wait for API server to be ready
-      uri:
+      ansible.builtin.uri:
         url: "https://{{ ansible_default_ipv4.address }}:6443/healthz"
-        validate_certs: no
+        validate_certs: false
         status_code: 200
       register: api_health
       until: api_health.status == 200
@@ -99,29 +101,31 @@
       delay: 10
 
     - name: Verify master node status
-      shell: kubectl get nodes {{ inventory_hostname }} -o wide
+      ansible.builtin.command: kubectl get nodes {{ inventory_hostname }} -o wide
       register: node_status
+      changed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Display final master node status
-      debug:
+      ansible.builtin.debug:
         msg: "{{ node_status.stdout_lines }}"
 
     - name: Verify cluster components
-      shell: kubectl get componentstatuses
+      ansible.builtin.command: kubectl get componentstatuses
       register: component_status
+      changed_when: false
+      failed_when: false
       environment:
         KUBECONFIG: /etc/kubernetes/admin.conf
-      failed_when: false
 
     - name: Display component status
-      debug:
+      ansible.builtin.debug:
         msg: "{{ component_status.stdout_lines }}"
 
   handlers:
     - name: restart kubelet
-      systemd:
+      ansible.builtin.systemd:
         name: kubelet
         state: restarted
-        daemon_reload: yes
+        daemon_reload: true

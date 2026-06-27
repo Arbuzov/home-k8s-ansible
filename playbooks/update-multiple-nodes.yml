@@ -1,86 +1,76 @@
 ---
-- name: Update Multiple Nodes with Custom Versions
+# Update several nodes to per-node target versions in one run.
+# Define the plan in node-updates.yml (see node-updates.yml.example) and run:
+#   ansible-playbook playbooks/update-multiple-nodes.yml -e @node-updates.yml -e @credentials.json
+- name: Validate and show the update plan
   hosts: localhost
-  gather_facts: no
-  vars:
-    # Пример конфигурации обновлений
-    # Переопределите через -e или в group_vars
-    node_updates:
-      kube-master:
-        version: "1.29"
-        drain: false  # Не drain единственную master ноду
-        system_update: true
-      kube-worker-1:
-        version: "1.29"
-        drain: true
-        system_update: true
-      kube-worker-2:
-        version: "1.28"  # Можно обновлять до разных версий
-        drain: true
-        system_update: false
-
+  gather_facts: false
   tasks:
-    - name: Validate node_updates configuration
-      fail:
-        msg: "Please define node_updates variable with node configurations"
+    - name: Validate node_updates is defined
+      ansible.builtin.fail:
+        msg: "Define node_updates (e.g. -e @node-updates.yml). See node-updates.yml.example."
       when: node_updates is not defined or node_updates | length == 0
 
     - name: Display update plan
-      debug:
+      ansible.builtin.debug:
         msg: |
-          📋 Update Plan:
+          Update plan:
           {% for node, config in node_updates.items() %}
-          - {{ node }}: Kubernetes {{ config.version }}{% if config.drain %} (with drain){% endif %}{% if config.system_update %} + system packages{% endif %}
+          - {{ node }}: Kubernetes {{ config.version }}{% if config.drain | default(true) %} (drain){% endif %}{% if config.system_update | default(true) %} + system packages{% endif %}
           {% endfor %}
 
     - name: Confirm update execution
-      pause:
+      ansible.builtin.pause:
         prompt: |
-          ⚠️  Are you sure you want to proceed with the update?
-          This will update nodes one by one according to the plan above.
-          Press ENTER to continue or Ctrl+C to abort
+          Proceed with the update above? Nodes are updated one at a time.
+          Press ENTER to continue or Ctrl+C to abort. (Set confirm_update=false to skip.)
       when: confirm_update | default(true)
 
-- name: Execute Node Updates
-  hosts: "{{ item.key }}"
-  become: yes
-  gather_facts: yes
+# One play over the whole cluster, one node at a time. Hosts not in the plan
+# end early. Per-node settings come from the node_updates dict.
+- name: Execute node updates
+  hosts: "{{ target_hosts | default('kubernetes_cluster') }}"
+  become: true
+  # gather_facts is deferred until after non-target hosts are skipped, so an
+  # unreachable node that isn't in the plan can't abort the run (any_errors_fatal).
+  gather_facts: false
   serial: 1
+  any_errors_fatal: true  # stop the rolling upgrade on the first failed node
   vars:
-    kubernetes_target_version: "{{ item.value.version }}"
-    drain_node: "{{ item.value.drain | default(true) }}"
-    update_system_packages: "{{ item.value.system_update | default(true) }}"
-    apply_upgrade: "{{ item.value.apply_upgrade | default(true) }}"
-  loop: "{{ node_updates | dict2items }}"
-  loop_control:
-    loop_var: item
+    node_cfg: "{{ node_updates[inventory_hostname] | default({}) }}"
+    kubernetes_target_version: "{{ node_cfg.version | default('') }}"
+    drain_node: "{{ node_cfg.drain | default(true) }}"
+    update_system_packages: "{{ node_cfg.system_update | default(true) }}"
+    apply_upgrade: "{{ node_cfg.apply_upgrade | default(true) }}"
 
   pre_tasks:
-    - name: Load credentials
-      include_vars: credentials.json
+    - name: Skip nodes not in the update plan
+      ansible.builtin.meta: end_host
+      when: inventory_hostname not in node_updates
+
+    - name: Gather facts for target nodes only
+      ansible.builtin.setup:
 
     - name: Display current node update info
-      debug:
-        msg: |
-          🎯 Updating: {{ inventory_hostname }}
-          📦 Target version: {{ kubernetes_target_version }}
-          🔄 Drain node: {{ drain_node }}
-          📦 Update system: {{ update_system_packages }}
+      ansible.builtin.debug:
+        msg: >-
+          Updating {{ inventory_hostname }} -> {{ kubernetes_target_version }}
+          (drain={{ drain_node }}, system_update={{ update_system_packages }})
 
   tasks:
     - name: Include single node update tasks
-      include_tasks: ../roles/kubernetes/tasks/update-node.yml
+      ansible.builtin.include_tasks: ../roles/kubernetes/tasks/update-node.yml
 
   post_tasks:
-    - name: Wait between node updates
-      pause:
+    - name: Pause between nodes
+      ansible.builtin.pause:
         seconds: "{{ wait_between_nodes | default(30) }}"
-      when: not ansible_loop.last
+      when: (wait_between_nodes | default(30) | int) > 0
 
-- name: Final Cluster Verification
+- name: Final cluster verification
   hosts: masters
-  become: yes
-  gather_facts: no
+  become: true
+  gather_facts: false
 
   tasks:
     - name: Get final cluster status
@@ -92,14 +82,20 @@
         KUBECONFIG: /etc/kubernetes/admin.conf
 
     - name: Display final cluster status
-      debug:
+      ansible.builtin.debug:
         msg: |
-          🎉 Update Complete! Final Cluster Status:
+          Final cluster status:
           {% for node in final_cluster_status.resources %}
           - {{ node.metadata.name }}: {{ node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first }} ({{ node.status.nodeInfo.kubeletVersion }})
           {% endfor %}
 
-    - name: Check for any not ready nodes
-      fail:
-        msg: "❌ Some nodes are not ready after update!"
-      when: final_cluster_status.resources | selectattr('status.conditions', 'defined') | selectattr('status.conditions', 'selectattr', 'type', 'equalto', 'Ready') | selectattr('status.conditions', 'selectattr', 'status', 'equalto', 'False') | list | length > 0
+    - name: Fail if any node is not Ready after update
+      ansible.builtin.assert:
+        that:
+          - (node.status.conditions | selectattr('type', 'equalto', 'Ready') | map(attribute='status') | first) == 'True'
+        fail_msg: "Node {{ node.metadata.name }} is not Ready after update"
+        success_msg: "Node {{ node.metadata.name }} is Ready"
+      loop: "{{ final_cluster_status.resources }}"
+      loop_control:
+        loop_var: node
+        label: "{{ node.metadata.name }}"

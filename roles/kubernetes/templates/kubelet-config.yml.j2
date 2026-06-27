@@ -8,7 +8,8 @@ authentication:
 authorization:
   mode: Webhook
 clusterDNS:
-  - 10.96.0.10
+  # Must be the 10th address of kubernetes_service_subnet (CoreDNS ClusterIP).
+  - {{ kubernetes_dns_ip | default('10.96.0.10') }}
 clusterDomain: cluster.local
 cgroupDriver: systemd
 failSwapOn: false

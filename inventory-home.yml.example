@@ -1,5 +1,5 @@
 # Example inventory — Kubernetes version is pinned per node.
-# Copy to inventory.yml and adjust IPs / versions for your fleet.
+# Copy to inventory-home.yml and adjust IPs / versions for your fleet.
 
 all:
   children:
@@ -35,6 +35,10 @@ all:
 
   vars:
     ansible_python_interpreter: /usr/bin/python3
+    # StrictHostKeyChecking=no skips host-key verification — convenient when
+    # provisioning fresh Pis whose keys aren't in known_hosts yet, but it allows
+    # MITM on first connect. Prefer pre-seeding keys with `ssh-keyscan` and
+    # dropping this line once the nodes are known.
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
 
 # Upgrade tips:

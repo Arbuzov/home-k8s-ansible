@@ -1,50 +1,62 @@
 # Common Role
 
-## Описание
-Роль `common` выполняет базовую настройку системы для работы Kubernetes на Raspberry Pi.
+## Description
 
-## Задачи
-- Обновление пакетного кэша и установка системных пакетов
-- **Установка hostname** из inventory_hostname
-- **Обновление /etc/hosts** с новым hostname
-- Настройка часового пояса
-- Настройка GPU memory split для Raspberry Pi
-- **Включение cgroup memory и cpuset** для Kubernetes
-- **Отключение swap** (требование Kubernetes)
-- Загрузка необходимых модулей ядра (br_netfilter, overlay)
-- Настройка sysctl параметров для Kubernetes
-- Настройка DNS
+The `common` role performs baseline system configuration required to run Kubernetes on Raspberry Pi.
 
-## Переменные
-- `system_packages`: список системных пакетов для установки
-- `timezone`: часовой пояс (по умолчанию: "Europe/Moscow")
-- `arm_memory_split`: память для GPU на ARM (по умолчанию: 16)
-- `cgroup_enabled`: включить cgroup настройки (по умолчанию: true)
-- `swap_disabled`: отключить swap (по умолчанию: true)
-- `inventory_hostname`: используется для установки hostname системы
+## Tasks
 
-## Критически важные изменения
-### cgroup настройки
-Роль добавляет в `/boot/firmware/cmdline.txt` критически важные параметры:
+- Update the package cache and install system packages
+- **Set the hostname** from `inventory_hostname`
+- **Update `/etc/hosts`** with the new hostname
+- Configure the timezone
+- Configure the GPU memory split for Raspberry Pi
+- **Enable cgroup memory and cpuset** for Kubernetes
+- **Disable swap** (Kubernetes requirement)
+- Load required kernel modules (`br_netfilter`, `overlay`)
+- Apply sysctl parameters for Kubernetes
+- Configure DNS
+
+## Variables
+
+- `system_packages`: list of system packages to install
+- `timezone`: timezone (default: `"Europe/Moscow"`)
+- `arm_memory_split`: GPU memory on ARM (default: `16`)
+- `cgroup_enabled`: enable cgroup settings (default: `true`)
+- `swap_disabled`: disable swap (default: `true`)
+- `inventory_hostname`: used to set the system hostname
+
+## Critical Changes
+
+### cgroup Settings
+
+The role appends the following critical parameters to `/boot/firmware/cmdline.txt`:
+
 ```
 cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1
 ```
-**Порядок параметров важен!** После изменения требуется перезагрузка.
 
-### Отключение swap
-Swap отключается полностью:
-- Немедленное отключение: `swapoff -a`
-- Постоянное отключение: комментирование в `/etc/fstab`
+**Parameter order matters!** A reboot is required after this change.
+
+### Disabling Swap
+
+Swap is disabled completely:
+
+- Immediate: `swapoff -a`
+- Permanent: comment out the swap entry in `/etc/fstab`
 
 ## Handlers
-- `reboot system`: перезагрузка системы при изменении критических параметров
 
-## Совместимость
+- `reboot system`: reboots the system when critical parameters change
+
+## Compatibility
+
 - Raspberry Pi OS (64-bit)
 - Kubernetes 1.27+
-- containerd как container runtime
+- containerd as the container runtime
 
-## Примечания
-- Роль должна выполняться с правами root (become: true)
-- После выполнения роли может потребоваться перезагрузка
-- Изменения в cmdline.txt применяются только после перезагрузки
+## Notes
+
+- The role must run with root privileges (`become: true`)
+- A reboot may be required after the role completes
+- Changes to `cmdline.txt` take effect only after a reboot
