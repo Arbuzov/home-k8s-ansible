@@ -6,5 +6,5 @@
   become: true
   gather_facts: true
   roles:
-    - role: vpn
+    - role: ../roles/vpn
       tags: [vpn]
