@@ -262,12 +262,14 @@ cd tests && molecule test
 ```
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs on every push:
-**yamllint + ansible-lint + syntax-check**, a **Molecule** convergence of the
-`common` role in a systemd container, and a **Trivy** filesystem scan. The
-Pi-specific tasks (cgroup/cmdline edits, reboots, systemd-resolved) are
-intentionally skipped in the container, so Molecule validates the `common`
-role's portable logic — it is **not** a full cluster bootstrap, which requires
-real ARM64 hardware.
+**yamllint + ansible-lint + a `--syntax-check` of every playbook**, plus a
+**Trivy** filesystem scan. The **Molecule** scenario (`tests/molecule/default/`)
+converges the `common` role in a systemd container; it's kept as a local test
+rather than a CI gate (systemd-in-Docker is flaky on hosted runners, and a
+red-by-environment job is worse than an honest pipeline). Pi-specific tasks
+(cgroup/cmdline edits, reboots, systemd-resolved) are skipped in the container,
+so it validates the `common` role's portable logic — not a full cluster
+bootstrap, which needs real ARM64 hardware.
 
 ---
 
