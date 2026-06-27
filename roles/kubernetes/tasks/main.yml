@@ -58,7 +58,7 @@
     src: kubelet-config.yml.j2
     dest: /etc/kubernetes/kubelet-config.yml
     backup: true
-  notify: restart kubelet
+  notify: Restart kubelet
 
 - name: Create kubelet service directory
   ansible.builtin.file:
@@ -81,7 +81,7 @@
       EnvironmentFile=-/etc/default/kubelet
       ExecStart=
       ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELET_KUBEADM_ARGS $KUBELET_EXTRA_ARGS
-  notify: restart kubelet
+  notify: Restart kubelet
 
 - name: Start and enable kubelet
   ansible.builtin.systemd:

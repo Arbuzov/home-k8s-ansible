@@ -124,7 +124,7 @@
         msg: "{{ component_status.stdout_lines }}"
 
   handlers:
-    - name: restart kubelet
+    - name: Restart kubelet
       ansible.builtin.systemd:
         name: kubelet
         state: restarted

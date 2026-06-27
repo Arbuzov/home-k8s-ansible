@@ -76,7 +76,7 @@
 
       [Install]
       WantedBy=multi-user.target
-  notify: restart x-ui
+  notify: Restart x-ui
 
 - name: Ensure x-ui state dir exists
   ansible.builtin.file:
@@ -98,7 +98,7 @@
         dest: "{{ vpn_xui_db }}"
         mode: '0600'
       when: not vpn_db.stat.exists
-      notify: restart x-ui
+      notify: Restart x-ui
 
 - name: Enable and start x-ui
   ansible.builtin.systemd:
@@ -144,7 +144,7 @@
         mode: '0700'
 
     # The original outage: certbot renewed but never copied into the panel. Deploy hook fixes it for good.
-    - name: Install certbot deploy hook (copy certs to panel + restart x-ui)
+    - name: Install certbot deploy hook (copy certs to panel + Restart x-ui)
       ansible.builtin.copy:
         dest: /etc/letsencrypt/renewal-hooks/deploy/x-ui-cert.sh
         mode: '0755'
@@ -153,7 +153,7 @@
           # Managed by Ansible (roles/vpn). Runs after every successful renewal.
           cp -f /etc/letsencrypt/live/{{ vpn_domain }}/fullchain.pem {{ vpn_cert_dir }}/
           cp -f /etc/letsencrypt/live/{{ vpn_domain }}/privkey.pem  {{ vpn_cert_dir }}/
-          systemctl restart x-ui
+          systemctl Restart x-ui
 
     - name: Seed panel cert dir from current certificate
       ansible.builtin.copy:
@@ -162,7 +162,7 @@
         remote_src: true
         mode: '0600'
       loop: [fullchain.pem, privkey.pem]
-      notify: restart x-ui
+      notify: Restart x-ui
 
 # Root fs is small (~8G); a single x-ui log once filled it to 100%.
 - name: Rotate x-ui logs

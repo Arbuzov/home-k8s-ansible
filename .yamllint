@@ -17,6 +17,9 @@ rules:
     max-spaces-inside: 1
   indentation:
     indent-sequences: whatever
+  octal-values:
+    forbid-implicit-octal: true
+    forbid-explicit-octal: true
 
 ignore: |
   etcd-backups/

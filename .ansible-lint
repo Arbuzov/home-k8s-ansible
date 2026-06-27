@@ -6,7 +6,16 @@ profile: basic
 exclude_paths:
   - etcd-backups/
   - .devcontainer/
-  - tests/Dockerfile.test
+  - tests/molecule/default/Dockerfile.test
+
+# Deliberate, documented exceptions:
+skip_list:
+  # Roles are referenced by relative path from playbooks/ — the repo is a
+  # standalone playbook tree, not a packaged collection with a roles_path.
+  - role-name[path]
+  # Deliberate idioms: `curl | gpg --dearmor` for the apt keyring (idempotent
+  # via creates:) and `systemctl is-active` as a read-only status check.
+  - command-instead-of-module
 
 # yes/no truthy values are accepted (see .yamllint); collections are declared
 # in requirements.yml.

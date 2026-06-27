@@ -16,7 +16,7 @@
 - name: Set hostname from inventory
   ansible.builtin.hostname:
     name: "{{ inventory_hostname }}"
-  notify: reboot system
+  notify: Reboot system
 
 - name: Update /etc/hosts with new hostname
   ansible.builtin.lineinfile:
@@ -52,7 +52,7 @@
     regexp: '^gpu_mem='
     line: "gpu_mem={{ arm_memory_split }}"
     backup: true
-  notify: reboot system
+  notify: Reboot system
   when: ansible_machine in ['armv7l', 'aarch64']
 
 - name: Enable cgroup memory and cpuset (Raspberry Pi cmdline)
@@ -60,7 +60,7 @@
     path: "{{ rpi_boot_dir }}/cmdline.txt"
     regexp: '^(?!.*cgroup_enable=memory)(.+?)\s*$'
     replace: '\1 cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1'
-  notify: reboot system
+  notify: Reboot system
   when:
     - cgroup_enabled | default(true)
     - ansible_machine in ['armv7l', 'aarch64']
@@ -143,5 +143,5 @@
       FallbackDNS=8.8.8.8 1.1.1.1
       Cache=yes
       DNSStubListener=yes
-  notify: restart systemd-resolved
+  notify: Restart systemd-resolved
   when: configure_dns | default(true)  # set false where systemd-resolved is absent (CI)

@@ -77,6 +77,7 @@
     daemon_reload: yes
 
 - name: Upgrade master components
+  when: is_master_node
   block:
     - name: Plan kubeadm upgrade
       command: "kubeadm upgrade plan v{{ kubernetes_target_version }}"
@@ -88,8 +89,6 @@
       command: "kubeadm upgrade apply v{{ kubernetes_target_version }} -y"
       register: upgrade_result
       when: apply_upgrade | default(true)
-
-  when: is_master_node
 
 - name: Upgrade worker components
   command: "kubeadm upgrade node"

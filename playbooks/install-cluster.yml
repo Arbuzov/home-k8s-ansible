@@ -1,4 +1,4 @@
 ---
 # Convenience wrapper — equivalent to running `ansible-playbook site.yml`.
 # Usage: ansible-playbook playbooks/install-cluster.yml -e @credentials.json
-- import_playbook: ../site.yml
+- import_playbook: ../site.yml  # noqa: name[play]
