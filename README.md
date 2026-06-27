@@ -37,21 +37,9 @@ defaults reflect a real, running cluster (Kubernetes 1.35.5).
 
 ## Architecture
 
-```
-                 ┌──────────────────────────┐
-                 │  kube-master (RPi 4)      │  control-plane + worker
-                 │  etcd · apiserver · CM ·  │
-                 │  scheduler · kubelet      │
-                 └────────────┬─────────────┘
-                              │  Flannel (VXLAN) 10.244.0.0/16
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
- ┌──────┴──────┐       ┌──────┴──────┐       ┌──────┴──────┐
- │ kube-worker-1│       │ kube-worker-2│       │ kube-worker-3│
- │  RPi (kubelet│       │  RPi (kubelet│       │  RPi (kubelet│
- │  + kube-proxy)│      │  + kube-proxy)│      │  + kube-proxy)│
- └─────────────┘       └─────────────┘       └─────────────┘
-```
+<p align="center">
+  <img src="docs/architecture.svg" alt="Cluster architecture: a kube-master control-plane node connected over Flannel VXLAN to three Raspberry Pi worker nodes" width="680">
+</p>
 
 | Component        | Choice                                             |
 |------------------|----------------------------------------------------|
