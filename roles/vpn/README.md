@@ -7,7 +7,7 @@ service (no Docker), with Let's Encrypt TLS that survives renewals.
 
 - Installs / upgrades the `x-ui` binary from the pinned release tarball (arch auto-detected).
 - Installs a systemd unit, enables and starts `x-ui`.
-- Obtains a Let's Encrypt cert (`certbot` **DNS-01 via Route53** — no inbound `:80`) and installs
+- Obtains a Let's Encrypt cert (`certbot` **standalone HTTP-01** — needs inbound `:80`) and installs
   a **deploy hook** that copies the renewed cert into the panel dir and restarts `x-ui` — fixing
   the classic "certbot renewed but the panel still served the old cert" outage.
 - Adds logrotate for `/var/log/x-ui/*.log` (root fs is small).
@@ -26,18 +26,22 @@ cp inventory-vpn.yml.example inventory-vpn.yml   # fill in host + vpn_domain + e
 ansible-playbook -i inventory-vpn.yml playbooks/deploy-vpn.yml
 ```
 
-## TLS / Route53
+## TLS
 
-Cert issuance uses certbot's DNS-01 plugin against Route53, so nothing needs `:80` open in the
-Azure NSG. Supply an IAM key (`vpn_route53_access_key` / `vpn_route53_secret_key`) scoped to the
-zone: `route53:ChangeResourceRecordSets`, `route53:GetChange`, `route53:ListHostedZones`. The role
-writes it to `/root/.aws/credentials` (0600) so the `certbot.timer` renewals authenticate too.
+Cert issuance uses certbot's **standalone HTTP-01** challenge, so the host needs inbound `:80`
+reachable (open it in the cloud firewall) and `vpn_domain` must already resolve to this host before
+the first run — Let's Encrypt validates by connecting to `http://vpn_domain`. Renewals run headless
+via `certbot.timer` (also standalone, so keep `:80` reachable); the deploy hook copies the fresh
+cert into the panel dir and restarts `x-ui`. Set `vpn_certbot_email` for expiry notices, or leave it
+empty to register without an email.
 
+> Migrating from an existing box? Seed `/etc/letsencrypt/` (and the panel cert dir) from a backup
+> first — the role skips issuance when a cert already exists, so no `:80`/DNS dance on cutover.
+>
 > REALITY inbounds don't need this cert at all (they borrow the donor's TLS) — it's only for the
 > panel HTTPS and the httpupgrade reserve inbound. Leave `vpn_domain` empty to skip TLS entirely.
 
 ## Variables
 
 See [defaults/main.yml](defaults/main.yml). Per-host, in the gitignored `inventory-vpn.yml`:
-`vpn_domain`, `vpn_certbot_email`, `vpn_route53_access_key`, `vpn_route53_secret_key`; optionally
-`vpn_db_restore_src` and `vpn_xui_version`.
+`vpn_domain`, `vpn_certbot_email`; optionally `vpn_db_restore_src` and `vpn_xui_version`.

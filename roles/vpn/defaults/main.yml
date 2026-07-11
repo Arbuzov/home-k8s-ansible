@@ -9,15 +9,12 @@ vpn_xui_arch: "{{ vpn_xui_arch_map[ansible_architecture] | default('amd64') }}"
 vpn_xui_tarball: "x-ui-linux-{{ vpn_xui_arch }}.tar.gz"
 vpn_xui_url: "https://github.com/MHSanaei/3x-ui/releases/download/v{{ vpn_xui_version }}/{{ vpn_xui_tarball }}"
 
-# TLS — Let's Encrypt via certbot DNS-01 (Route53). No inbound :80 needed; renews headless.
+# TLS — Let's Encrypt via certbot standalone (HTTP-01). Requires inbound :80 reachable and
+# DNS for vpn_domain already pointing at this host (LE validates over HTTP to the domain).
+# Renews headless via certbot.timer; the deploy hook copies fresh certs into the panel dir.
 vpn_domain: ""               # e.g. vpn.example.com — set in inventory-vpn.yml (gitignored)
-vpn_certbot_email: ""        # LE registration / expiry-notice email
+vpn_certbot_email: ""        # LE registration / expiry-notice email (empty => --register-unsafely-without-email)
 vpn_cert_dir: /root/cert     # where the x-ui panel reads fullchain.pem / privkey.pem
-
-# IAM key scoped to the Route53 zone (route53:ChangeResourceRecordSets + GetChange + ListHostedZones).
-# Written to /root/.aws/credentials so both issuance and the renewal timer can authenticate.
-vpn_route53_access_key: ""
-vpn_route53_secret_key: ""
 
 # Panel DB = source of truth (inbounds, UUIDs, REALITY keys), kept out-of-band.
 # Point this at a LOCAL backup to seed a FRESH box; it never overwrites an existing DB.
