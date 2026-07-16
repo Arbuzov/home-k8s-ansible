@@ -1,0 +1,6 @@
+---
+- name: Restart wstunnel
+  ansible.builtin.systemd:
+    name: wstunnel
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,15 @@
+---
+# L4 TCP relay (socat) on the Selectel RU VDS — "Variant A" of the anti-TCP16-20 cascade.
+# A dumb, transparent byte forwarder: home client -> Selectel:<listen> -> GCP:<target>.
+# The DPI-exposed leg (home -> Selectel) terminates on a RUSSIAN IP, so Rostelecom's TCP16-20
+# volumetric freeze (foreign-prefix only) never applies; Selectel egress to GCP is not frozen.
+# Nothing on GCP changes — the relay carries the existing VLESS/Reality TLS stream through
+# byte-for-byte, so the origin (Reality inbound on :2053) is untouched and Reality auth still matches.
+# Keep this >= 1024 (non-privileged): socat runs unprivileged with no bind capability.
+relay_listen_port: 2053
+# Upstream the relay forwards to, "<host>:<port>" (the GCP VLESS/Reality inbound).
+# MUST be set in inventory — kept out of the repo (public). e.g. "<GCP_IP>:2053".
+relay_target: ""
+relay_user: relay
+# SSH port kept open in the host firewall (lock-out guard). Change if sshd is not on 22.
+relay_ssh_port: 22

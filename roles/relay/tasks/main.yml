@@ -1,0 +1,103 @@
+---
+# Native socat L4 forwarder (systemd) + a minimal host firewall. No Docker. The Selectel box is
+# single-purpose (the relay), so this role owns both the forward service and the firewall.
+
+- name: Require a forward target (host:port)
+  ansible.builtin.assert:
+    that:
+      - relay_target | length > 0
+      - "':' in relay_target"
+    fail_msg: "relay_target must be set as host:port (e.g. '<GCP_IP>:2053') — set it in inventory-vpn.yml."
+
+- name: Install socat and nftables
+  ansible.builtin.apt:
+    name: [socat, nftables]
+    state: present
+    update_cache: true
+
+- name: Create relay system user
+  ansible.builtin.user:
+    name: "{{ relay_user }}"
+    system: true
+    shell: /usr/sbin/nologin
+    create_home: false
+
+# Variant A (this) and the wstunnel server (Variant B, roles/wstunnel) are mutually exclusive
+# relay designs for the same box. Stop wstunnel if present so there's no stray listener.
+- name: Stop the wstunnel server if present (mutually exclusive relay design)
+  ansible.builtin.systemd:
+    name: wstunnel
+    state: stopped
+    enabled: false
+  failed_when: false
+
+- name: Install host firewall ruleset
+  ansible.builtin.copy:
+    dest: /etc/nftables.conf
+    mode: '0755'
+    content: |
+      #!/usr/sbin/nft -f
+      flush ruleset
+      table inet filter {
+        chain input {
+          type filter hook input priority 0; policy drop;
+          ct state established,related accept
+          ct state invalid drop
+          iif "lo" accept
+          ip protocol icmp accept
+          ip6 nexthdr ipv6-icmp accept
+          tcp dport {{ relay_ssh_port }} accept
+          tcp dport {{ relay_listen_port }} accept
+        }
+        chain forward { type filter hook forward priority 0; policy drop; }
+        chain output { type filter hook output priority 0; policy accept; }
+      }
+  notify: Reload nftables
+
+- name: Enable and start nftables (loads /etc/nftables.conf on boot)
+  ansible.builtin.systemd:
+    name: nftables
+    state: started
+    enabled: true
+
+# ponytail: own the unit (socat ships none) — unprivileged socat, all caps dropped.
+- name: Install relay systemd unit
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/relay.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=L4 TCP relay (socat :{{ relay_listen_port }} -> {{ relay_target }})
+      After=network.target nss-lookup.target
+      Wants=network.target
+
+      [Service]
+      Type=simple
+      User={{ relay_user }}
+      Group={{ relay_user }}
+      # Listen port is non-privileged (>= 1024) — socat needs no capabilities; drop them all.
+      CapabilityBoundingSet=
+      NoNewPrivileges=true
+      ExecStart=/usr/bin/socat TCP4-LISTEN:{{ relay_listen_port }},fork,reuseaddr TCP4:{{ relay_target }}
+      Restart=on-failure
+      RestartSec=5
+      LimitNOFILE=1048576
+      # Hardening — all safe for a pure byte forwarder (it writes nothing to disk).
+      ProtectSystem=strict
+      ProtectHome=true
+      PrivateTmp=true
+      ProtectKernelTunables=true
+      ProtectKernelModules=true
+      ProtectControlGroups=true
+      RestrictRealtime=true
+
+      [Install]
+      WantedBy=multi-user.target
+  notify: Restart relay
+
+- name: Enable and start relay
+  ansible.builtin.systemd:
+    name: relay
+    state: started
+    enabled: true
+    daemon_reload: true

@@ -1,0 +1,10 @@
+---
+# Deploy / converge the L4 TCP relay (Variant A cascade) on the Selectel VDS.
+# Run: ansible-playbook -i inventory-vpn.yml playbooks/deploy-relay.yml
+- name: Deploy L4 TCP relay
+  hosts: relay
+  become: true
+  gather_facts: true
+  roles:
+    - role: ../roles/relay
+      tags: [relay]

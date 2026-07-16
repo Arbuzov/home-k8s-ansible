@@ -1,0 +1,32 @@
+---
+# wstunnel server — native systemd install, no Docker. A minimal WebSocket relay
+# that only shuffles bytes: home client → RU relay (this host) → GCP WireGuard.
+wstunnel_version: "10.5.1"
+wstunnel_arch_map:
+  aarch64: arm64
+  x86_64: amd64
+  armv7l: armv7
+wstunnel_arch: "{{ wstunnel_arch_map[ansible_architecture] | default('amd64') }}"
+# Release TAG is v-prefixed (v10.5.1) but the tarball FILENAME is not (wstunnel_10.5.1_...).
+wstunnel_tarball: "wstunnel_{{ wstunnel_version }}_linux_{{ wstunnel_arch }}.tar.gz"
+wstunnel_url: "https://github.com/erebe/wstunnel/releases/download/v{{ wstunnel_version }}/{{ wstunnel_tarball }}"
+wstunnel_bin: /usr/local/bin/wstunnel
+# Integrity: only amd64 (the Selectel target) is pinned. Other arches skip the checksum
+# (HTTPS from GitHub still authenticates the transport). Add hashes here as needed.
+wstunnel_checksum_map:
+  amd64: "sha256:a806cdb410396e043226ad31f8769dc85b8a6f1bee6cdf72ff63e29bb8a644fe"
+
+# server ws://0.0.0.0:80 — listens on privileged :80. Ingress is a RU IP, so the
+# Rostelecom TCP16-20 volumetric freeze (destination-prefix based) does not apply.
+wstunnel_listen: "ws://0.0.0.0:80"
+
+# Upstream allowlist: the only host:port the relay may forward to (the GCP WireGuard
+# endpoint, e.g. "<GCP_IP>:1194"). MUST be set in inventory — the role refuses to
+# run as an open relay. Empty here so the source of truth stays out of the repo.
+wstunnel_restrict_to: ""
+
+# Keep parity with the client's WebSocket ping (the Helm chart uses 5s).
+wstunnel_ping_frequency: "5s"
+
+# Unprivileged service account that binds :80 via CAP_NET_BIND_SERVICE (see tasks/README).
+wstunnel_user: wstunnel

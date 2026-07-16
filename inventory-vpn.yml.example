@@ -14,3 +14,34 @@ vpn:
     vpn_certbot_email: you@example.com      # empty => --register-unsafely-without-email
     # Seed a FRESH box from a local DB backup (never overwrites a live DB):
     # vpn_db_restore_src: ./x-ui.db.backup
+
+# === Variant A (ACTIVE): dumb L4 TCP relay on a Russian VDS (Selectel) — roles/relay ===
+# socat forwards :2053 -> the existing GCP VLESS/Reality inbound. The DPI-exposed hop terminates
+# on a Russian IP (TCP16-20 is not applied to RU prefixes); GCP is untouched. Repoint the home
+# xray client's outbound address at this relay (keep port 2053). Deploy: playbooks/deploy-relay.yml
+relay:
+  hosts:
+    selectel-relay:
+      ansible_host: 198.51.100.20            # Selectel VDS public IP (RU)
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/your-key
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  vars:
+    # REQUIRED — the GCP VLESS/Reality endpoint the relay forwards to (<GCP_IP>:2053).
+    relay_target: "203.0.113.30:2053"
+
+# === Variant B (FALLBACK): wstunnel WebSocket relay — roles/wstunnel ===
+# Wraps WireGuard UDP over ws://<selectel>:80 to a GCP WireGuard server. Mutually exclusive with
+# `relay` above (both are the same Selectel box). Requires a WireGuard server ON GCP. Deploy:
+# playbooks/deploy-wstunnel.yml
+wstunnel:
+  hosts:
+    wstunnel-relay:
+      ansible_host: 198.51.100.20            # Selectel VDS public IP (RU)
+      ansible_user: root
+      ansible_ssh_private_key_file: ~/.ssh/your-key
+      ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+  vars:
+    # REQUIRED — the GCP WireGuard endpoint the relay may forward to (<GCP_IP>:1194).
+    # The role refuses to start without it (a public :80 relay with no allowlist is an open proxy).
+    wstunnel_restrict_to: "203.0.113.30:1194"

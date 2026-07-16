@@ -1,0 +1,10 @@
+---
+# Deploy / converge the wstunnel WebSocket relay on the Selectel VDS.
+# Run: ansible-playbook -i inventory-vpn.yml playbooks/deploy-wstunnel.yml
+- name: Deploy wstunnel relay
+  hosts: wstunnel
+  become: true
+  gather_facts: true
+  roles:
+    - role: ../roles/wstunnel
+      tags: [wstunnel]

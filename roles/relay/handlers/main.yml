@@ -1,0 +1,11 @@
+---
+- name: Reload nftables
+  ansible.builtin.command: nft -f /etc/nftables.conf
+  changed_when: true
+  # ponytail: `nft -f` is atomic and version-proof; systemctl reload isn't uniform across units.
+
+- name: Restart relay
+  ansible.builtin.systemd:
+    name: relay
+    state: restarted
+    daemon_reload: true
