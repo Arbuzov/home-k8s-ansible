@@ -12,6 +12,10 @@ inventory-test.yml
 inventory-ci.yml
 inventory-vpn.yml
 
+# Real per-node host_vars hold node-specific values (disk UUIDs, overrides);
+# only the *.example templates are tracked.
+host_vars/*.yml
+
 # DevContainer and testing
 .devcontainer/.env
 tests/.molecule/

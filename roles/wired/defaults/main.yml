@@ -1,0 +1,7 @@
+---
+# Wired cluster backbone: static IP on the Ethernet interface, no gateway.
+# Wi-Fi (wlan0) keeps the default route, DNS and client/LAN access; copper
+# carries only inter-node traffic (Flannel VXLAN, SMB). Per-host address is
+# set as `wired_ip` in the inventory.
+wired_iface: eth0
+wired_prefix: 24

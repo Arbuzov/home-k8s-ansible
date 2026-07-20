@@ -9,6 +9,7 @@ all:
           hosts:
             kube-master:
               ansible_host: 192.168.1.100
+              wired_ip: 10.10.0.100          # optional: roles/wired copper backbone
               node_role: master
               node_taints: []                 # master also runs workloads
               kubernetes_version: "1.35.5"     # exact package version
@@ -17,11 +18,13 @@ all:
           hosts:
             kube-worker-1:
               ansible_host: 192.168.1.101
+              wired_ip: 10.10.0.101           # optional: roles/wired copper backbone
               node_role: worker
               kubernetes_version: "1.35.5"
               kubernetes_major_minor: "1.35"
             kube-worker-2:
               ansible_host: 192.168.1.102
+              wired_ip: 10.10.0.102           # optional: roles/wired copper backbone
               node_role: worker
               kubernetes_version: "1.35.5"
               kubernetes_major_minor: "1.35"
@@ -29,6 +32,7 @@ all:
             # version (Kubernetes version-skew policy):
             kube-worker-3:
               ansible_host: 192.168.1.103
+              wired_ip: 10.10.0.103           # optional: roles/wired copper backbone
               node_role: worker
               kubernetes_version: "1.34.8"
               kubernetes_major_minor: "1.34"

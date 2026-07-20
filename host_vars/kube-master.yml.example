@@ -6,3 +6,21 @@
 
 # Give a beefier control-plane node more pods than the default:
 # kubelet_max_pods: 150
+
+# Mount an external USB disk on this node (roles/master/tasks/usb-mount.yml).
+# Find the partition's UUID with `lsblk -f` / `blkid`. `nofail` keeps a missing
+# disk from hanging boot; `x-systemd.device-timeout` waits for a slow-spinup
+# HDD; passno 0 skips the boot fsck (right for exFAT/removable).
+# usb_mounts:
+#   - src: "UUID=XXXX-XXXX"
+#     path: /mnt/usb
+#     fstype: exfat
+#     opts: "rw,nofail,nosuid,nodev,relatime,uid=1000,gid=1000,iocharset=utf8,errors=remount-ro,x-systemd.device-timeout=30"
+#     passno: "0"
+#     owner: "1000"
+#     group: "1000"
+#
+# If the USB-SATA bridge is unstable on the `uas` driver (I/O errors / resets at
+# boot — common with ASMedia ASM1051E/ASM1153), disable UAS for it by usb id
+# (find it with `lsusb`). Written to cmdline.txt; needs a reboot.
+# usb_storage_quirks: "174c:55aa:u"

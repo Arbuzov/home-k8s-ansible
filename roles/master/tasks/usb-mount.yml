@@ -1,0 +1,65 @@
+---
+# Mount external USB disk(s) on the master and make them survive a reboot.
+#
+# Why this exists: the master's USB "Backup" disk sits behind an ASMedia
+# ASM1051E/ASM1153 USB-SATA bridge (usb id 174c:55aa) that is unstable on the
+# Pi's default `uas` driver — it throws I/O errors and link resets exactly when
+# systemd tries to mount at boot, so with `nofail` the mount was silently
+# skipped and the disk came up unmounted. Fix = pin the bridge to the plain
+# `usb-storage` driver via a kernel cmdline quirk, plus a boot-robust fstab
+# entry (UUID + nofail + x-systemd.device-timeout, no boot fsck on exFAT).
+
+# Re-detect the boot dir so `--tags usb-mount` works standalone (the common role
+# that normally sets rpi_boot_dir may be tag-skipped). bookworm+ = /boot/firmware.
+- name: Detect Raspberry Pi boot directory
+  ansible.builtin.stat:
+    path: /boot/firmware/cmdline.txt
+  register: usb_boot_firmware
+  when: rpi_boot_dir is not defined
+
+- name: Set boot directory fact
+  ansible.builtin.set_fact:
+    rpi_boot_dir: "{{ '/boot/firmware' if usb_boot_firmware.stat.exists else '/boot' }}"
+  when: rpi_boot_dir is not defined
+
+- name: Ensure USB mount points exist
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode | default('0755') }}"
+  loop: "{{ usb_mounts }}"
+
+# The module writes the fstab entry before it mounts, so on a fresh DR where the
+# bridge is still flaky under `uas`, a failed live mount still leaves a correct
+# fstab line — the UAS-quirk reboot below then mounts it on the stable driver at
+# boot. failed_when:false keeps that transient from aborting the play.
+# ponytail: masks a genuinely bad entry (wrong UUID/fstype) too — the disk just
+# comes up unmounted. Upgrade path: apply the quirk + reboot BEFORE this mount.
+- name: Configure fstab entry and mount USB disk(s)
+  ansible.posix.mount:
+    src: "{{ item.src }}"
+    path: "{{ item.path }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts }}"
+    dump: "0"
+    passno: "{{ item.passno | default('0') }}"
+    state: mounted
+    backup: true
+  loop: "{{ usb_mounts }}"
+  register: usb_mount_result
+  failed_when: false
+
+# Disable UAS for a flaky USB-SATA bridge. Takes effect on the next reboot.
+# Same negative-lookahead idiom as the cgroup edit in roles/common.
+- name: Disable UAS for a flaky USB-SATA bridge (kernel cmdline)
+  ansible.builtin.replace:
+    path: "{{ rpi_boot_dir }}/cmdline.txt"
+    regexp: '^(?!.*usb-storage\.quirks={{ usb_storage_quirks | regex_escape }})(.+?)\s*$'
+    replace: '\1 usb-storage.quirks={{ usb_storage_quirks }}'
+    backup: true
+  notify: Reboot system
+  when:
+    - usb_storage_quirks | default('') | length > 0
+    - ansible_machine in ['armv7l', 'aarch64']

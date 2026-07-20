@@ -1,0 +1,9 @@
+---
+# The master role runs in its own play (see site.yml), so it can't reach the
+# Reboot system handler defined in roles/common — it needs its own copy.
+- name: Reboot system
+  ansible.builtin.reboot:
+    reboot_timeout: 300
+    post_reboot_delay: 30
+    test_command: uptime
+  when: allow_reboot | default(true)  # set false in CI/containers

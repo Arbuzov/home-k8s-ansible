@@ -33,6 +33,15 @@ kubernetes_cni: "flannel"
 #   flannel_manifest_url: "https://raw.githubusercontent.com/flannel-io/flannel/v0.26.7/Documentation/kube-flannel.yml"
 flannel_manifest_url: "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
 
+# Interfaces Flannel prefers for inter-node (VXLAN) traffic, checked in order.
+# eth0 first = the wired backbone (roles/wired); wlan0 fallback lets a node
+# with a dead cable come back on Wi-Fi after a flannel restart — see the
+# "Known ceiling" note in roles/wired/README.md. Empty list = flannel default
+# (interface of the default route, i.e. wlan0).
+flannel_ifaces:
+  - eth0
+  - wlan0
+
 # Optional: pin containerd.io to an exact apt version (e.g. "1.7.27-1"). Leave
 # empty to install whatever the Docker repo serves on first install; existing
 # nodes are not force-upgraded (see roles/containerd).

@@ -1,0 +1,71 @@
+---
+- name: Assert wired_ip is set for this host
+  ansible.builtin.assert:
+    that:
+      - wired_ip is defined
+      - wired_ip | length > 0
+    fail_msg: "Set wired_ip for {{ inventory_hostname }} in the inventory (see roles/wired/README.md)"
+
+- name: Check current {{ wired_iface }} addresses
+  ansible.builtin.command: ip -4 -o addr show dev {{ wired_iface }}
+  register: wired_addr
+  changed_when: false
+  failed_when: false
+
+# A node whose eth0 already carries the wired IP is left completely alone —
+# the live fleet was partly hand-configured (dhcpcd.conf on the bullseye
+# nodes, an NM "Wired connection 1" profile on worker-2, the netplan-eth0
+# profile on worker-3), and layering a second profile/config block on top of
+# a working one would make NM/dhcpcd race for the interface.
+- name: Configure {{ wired_iface }}
+  when: (wired_ip ~ '/') not in (wired_addr.stdout | default(''))
+  block:
+    # Bullseye nodes run dhcpcd, bookworm/trixie run NetworkManager — detect
+    # at runtime instead of hardcoding per-OS assumptions.
+    - name: Detect NetworkManager
+      ansible.builtin.command: systemctl is-active NetworkManager
+      register: wired_nm
+      changed_when: false
+      failed_when: false
+
+    - name: Configure {{ wired_iface }} via NetworkManager
+      community.general.nmcli:
+        conn_name: wired-backbone
+        ifname: "{{ wired_iface }}"
+        type: ethernet
+        method4: manual
+        ip4: "{{ wired_ip }}/{{ wired_prefix }}"
+        never_default4: true
+        method6: disabled
+        autoconnect: true
+        state: present
+      when: wired_nm.rc == 0
+
+    # `nmcli connection up` fails while the cable is unplugged (no carrier);
+    # that is fine — autoconnect activates the profile on carrier-up.
+    - name: Activate wired-backbone connection
+      ansible.builtin.command: nmcli connection up wired-backbone
+      register: wired_nm_up
+      changed_when: wired_nm_up.rc == 0
+      failed_when: false
+      when: wired_nm.rc == 0
+
+    - name: Configure {{ wired_iface }} via dhcpcd
+      ansible.builtin.blockinfile:
+        path: /etc/dhcpcd.conf
+        marker: "# {mark} ANSIBLE MANAGED — wired backbone"
+        block: |
+          interface {{ wired_iface }}
+          static ip_address={{ wired_ip }}/{{ wired_prefix }}
+          nogateway
+      when: wired_nm.rc != 0
+
+    # Apply live without restarting dhcpcd (it also manages wlan0 and the
+    # SSH session rides on it); dhcpcd re-applies the static block on
+    # boot/carrier-up.
+    - name: Bring {{ wired_iface }} up with the wired IP
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - ip link set {{ wired_iface }} up
+        - ip addr replace {{ wired_ip }}/{{ wired_prefix }} dev {{ wired_iface }}
+      when: wired_nm.rc != 0

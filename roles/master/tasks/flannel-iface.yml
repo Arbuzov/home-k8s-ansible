@@ -1,0 +1,67 @@
+---
+# Point Flannel's VXLAN at the wired backbone (see roles/wired/README.md).
+# The args list is REPLACED wholesale, not appended: the live DaemonSet once
+# carried an out-of-band `--public-ip=$(NODE_IP)` patch that pinned every
+# node's advertised VXLAN endpoint to its Wi-Fi address — appending --iface
+# flags next to it would leave all inter-node traffic on Wi-Fi (or blackhole
+# it under strict rp_filter). Replace guarantees the exact flag set and yields
+# at most one rollout per change.
+# jsonpath `args[*]` yields a space-separated string; `args` alone would render
+# a Go slice ("[--ip-masq --kube-subnet-mgr]"), which is NOT valid JSON — do not
+# from_json it. The args here never contain spaces, so .split() round-trips.
+- name: Read current Flannel args
+  ansible.builtin.command: >-
+    kubectl -n kube-flannel get ds kube-flannel-ds
+    -o jsonpath={.spec.template.spec.containers[0].args[*]}
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: flannel_current_args
+  changed_when: false
+
+- name: Replace Flannel args with the wired-backbone set
+  ansible.builtin.command: >-
+    kubectl -n kube-flannel patch ds kube-flannel-ds --type=json
+    -p '[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":{{ flannel_desired_args | to_json }}}]'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  vars:
+    flannel_desired_args: "{{ ['--ip-masq', '--kube-subnet-mgr'] + (flannel_ifaces | map('regex_replace', '^', '--iface=') | list) }}"
+  when: (flannel_current_args.stdout | default('')).split() != flannel_desired_args
+  register: flannel_args_patch
+
+- name: Wait for Flannel rollout after args change
+  ansible.builtin.command: kubectl -n kube-flannel rollout status ds kube-flannel-ds --timeout=180s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: flannel_args_patch is not skipped
+  changed_when: false
+
+# A spec-unchanged re-run still reconciles the running endpoints: a flannel
+# pod that started while its cable was dead stays latched to wlan0 until
+# restarted, even though the DS args are already correct.
+- name: Read per-node Flannel VXLAN endpoints
+  ansible.builtin.shell: >-
+    kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}={.metadata.annotations.flannel\.alpha\.coreos\.com/public-ip}{"\n"}{end}'
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: flannel_endpoints
+  changed_when: false
+
+- name: Restart Flannel so stale endpoints re-bind to the wired interface
+  ansible.builtin.command: kubectl -n kube-flannel rollout restart ds kube-flannel-ds
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  vars:
+    wired_nodes: "{{ groups['kubernetes_cluster'] | map('extract', hostvars) | selectattr('wired_ip', 'defined') | list }}"
+    expected_endpoints: "{{ wired_nodes | map(attribute='inventory_hostname') | zip(wired_nodes | map(attribute='wired_ip')) | map('join', '=') | list }}"
+  when:
+    - flannel_args_patch is skipped
+    - expected_endpoints | difference(flannel_endpoints.stdout_lines) | length > 0
+  register: flannel_endpoint_restart
+
+- name: Wait for Flannel rollout after endpoint restart
+  ansible.builtin.command: kubectl -n kube-flannel rollout status ds kube-flannel-ds --timeout=180s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  when: flannel_endpoint_restart is not skipped
+  changed_when: false

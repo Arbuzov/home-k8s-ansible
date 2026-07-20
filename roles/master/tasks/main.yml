@@ -77,6 +77,14 @@
   changed_when: "'created' in flannel_apply.stdout or 'configured' in flannel_apply.stdout"
   when: kubernetes_cni == "flannel"
 
+# Re-applying the upstream manifest above resets the DaemonSet args, so the
+# iface preference is (re-)patched right after every apply.
+- name: Configure Flannel interface preference
+  ansible.builtin.include_tasks: flannel-iface.yml
+  when:
+    - kubernetes_cni == "flannel"
+    - flannel_ifaces | default([]) | length > 0
+
 - name: Generate join token
   command: kubeadm token create --print-join-command
   register: join_command
@@ -109,3 +117,10 @@
     wait_timeout: 300
   environment:
     KUBECONFIG: /etc/kubernetes/admin.conf
+
+# Mount external USB disk(s) on the control-plane node (opt-in via usb_mounts
+# in host_vars). Independent of the k8s setup above.
+- name: Mount USB disk(s) on the master
+  ansible.builtin.include_tasks: usb-mount.yml
+  when: usb_mounts | default([]) | length > 0
+  tags: [usb-mount]

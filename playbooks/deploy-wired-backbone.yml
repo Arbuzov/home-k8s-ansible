@@ -1,0 +1,54 @@
+---
+# Wire the cluster's internal backbone: static eth0 IPs on every node
+# (Wi-Fi keeps the default route and client access), verify the full wired
+# mesh with pings, and only then point Flannel's VXLAN at the wired
+# interface — a dead cable aborts the rollout while the cluster still runs
+# on Wi-Fi. Plug all nodes into the hub BEFORE running this.
+# See roles/wired/README.md for the design and address plan.
+# Run: ansible-playbook -i inventory-home.yml playbooks/deploy-wired-backbone.yml
+- name: Configure wired backbone interfaces
+  hosts: kubernetes_cluster
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Load credentials
+      ansible.builtin.include_vars: ../credentials.json
+      tags: always
+    - name: Set ansible_ssh_pass from credentials
+      ansible.builtin.set_fact:
+        ansible_ssh_pass: "{{ ansible_password }}"
+      tags: always
+      when: ansible_password is defined
+
+  roles:
+    - role: ../roles/wired
+      tags: [wired]
+
+- name: Verify wired mesh connectivity
+  hosts: kubernetes_cluster
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Ping every peer over the wired interface
+      ansible.builtin.command: >-
+        ping -c 2 -W 2 -I {{ wired_iface | default('eth0') }}
+        {{ hostvars[item].wired_ip }}
+      loop: "{{ groups['kubernetes_cluster'] | difference([inventory_hostname]) }}"
+      changed_when: false
+      tags: [wired, verify]
+
+- name: Point Flannel VXLAN at the wired interface
+  hosts: masters
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Patch Flannel iface preference
+      ansible.builtin.include_tasks:
+        file: ../roles/master/tasks/flannel-iface.yml
+        apply:
+          tags: [wired, flannel]
+      when: flannel_ifaces | default([]) | length > 0
+      tags: [wired, flannel]
