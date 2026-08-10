@@ -20,7 +20,10 @@
 #     owner: "1000"
 #     group: "1000"
 #
-# If the USB-SATA bridge is unstable on the `uas` driver (I/O errors / resets at
-# boot — common with ASMedia ASM1051E/ASM1153), disable UAS for it by usb id
-# (find it with `lsusb`). Written to cmdline.txt; needs a reboot.
-# usb_storage_quirks: "174c:55aa:u"
+# If the USB-SATA/NVMe bridge is unstable on the `uas` driver (I/O errors, resets,
+# or the device dropping off the bus entirely), disable UAS for it by usb id.
+# Common offenders: ASMedia ASM1051E/ASM1153, JMicron JMS583.
+# Take the id from `lsusb` on the node itself — a quirk whose id matches no
+# attached device is silently ignored, and the disk keeps running on `uas`.
+# Written to cmdline.txt; needs a reboot.
+# usb_storage_quirks: "152d:0583:u"
